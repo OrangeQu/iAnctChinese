@@ -3,7 +3,11 @@
 基于 Spring Boot + Vue3 的古籍智能标注与知识图谱演示项目，覆盖实体/关系/句读标注、文献类型识别及多视图可视化（知识图谱、时间轴、地图、统计信息等）。
 
 
-https://github.com/user-attachments/assets/e3496cc7-886a-49b6-a274-ca0ba604471e
+
+
+
+https://github.com/user-attachments/assets/e0cfead0-1392-4e88-b4b3-7a9c952bbb8d
+
 
 
 ## 目录结构
