@@ -59,7 +59,7 @@ const handleSubmit = async () => {
   saving.value = true;
   try {
     await store.uploadNewText({ ...form });
-    ElMessage.success("上传成功，已进入分析流程");
+    ElMessage.success("上传成功，已载入到结构标注视图");
     drawerVisible.value = false;
     resetForm();
   } finally {

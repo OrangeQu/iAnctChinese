@@ -2,6 +2,7 @@ package com.ianctchinese.controller;
 
 import com.ianctchinese.dto.AutoAnnotationResponse;
 import com.ianctchinese.dto.ClassificationResponse;
+import com.ianctchinese.dto.ModelAnalysisResponse;
 import com.ianctchinese.dto.TextInsightsResponse;
 import com.ianctchinese.service.AnalysisService;
 import lombok.RequiredArgsConstructor;
@@ -20,17 +21,22 @@ public class TextAnalysisController {
   private final AnalysisService analysisService;
 
   @PostMapping("/{textId}/classify")
-  public ResponseEntity<ClassificationResponse> classify(@PathVariable Long textId) {
+  public ResponseEntity<ClassificationResponse> classify(@PathVariable("textId") Long textId) {
     return ResponseEntity.ok(analysisService.classifyText(textId));
   }
 
   @PostMapping("/{textId}/auto-annotate")
-  public ResponseEntity<AutoAnnotationResponse> autoAnnotate(@PathVariable Long textId) {
+  public ResponseEntity<AutoAnnotationResponse> autoAnnotate(@PathVariable("textId") Long textId) {
     return ResponseEntity.ok(analysisService.autoAnnotate(textId));
   }
 
+  @PostMapping("/{textId}/full")
+  public ResponseEntity<ModelAnalysisResponse> fullAnalysis(@PathVariable("textId") Long textId) {
+    return ResponseEntity.ok(analysisService.runFullAnalysis(textId));
+  }
+
   @GetMapping("/{textId}/insights")
-  public ResponseEntity<TextInsightsResponse> insights(@PathVariable Long textId) {
+  public ResponseEntity<TextInsightsResponse> insights(@PathVariable("textId") Long textId) {
     return ResponseEntity.ok(analysisService.buildInsights(textId));
   }
 }

@@ -1,0 +1,79 @@
+
+  private List<String> buildRecommendedViews(String category) {
+    return switch (category) {
+      case "travelogue" -> List.of("地图", "时间�?, "词云");
+      case "biography" -> List.of("时间�?, "亲情�?, "知识图谱");
+      default -> List.of("知识图谱", "对抗视图", "统计图表");
+    };
+  }
+
+  private String buildAnalysisSummary(TextDocument text, Stats stats) {
+    String categoryLabel = CATEGORY_LABELS.getOrDefault(text.getCategory(), "综合");
+    return String.format(Locale.CHINA,
+        "模型建议该文本归类为�?s」，已完�?%d 个实体�?d 条关系。建议优先查�?%s 视图以洞察关键信息�?,
+        categoryLabel,
+        stats.getEntityCount(),
+        stats.getRelationCount(),
+        String.join(" / ", buildRecommendedViews(text.getCategory())));
+  }
+
+  private List<EntityAnnotation> generateEntitiesForCategory(TextDocument text) {
+    List<EntityAnnotation> entities = new ArrayList<>();
+    switch (text.getCategory()) {
+      case "travelogue" -> entities.addAll(List.of(
+          buildEntity(text, "作�?, EntityCategory.PERSON, 0, 2, 0.95),
+          buildEntity(text, "名山", EntityCategory.LOCATION, 15, 17, 0.8),
+          buildEntity(text, "江河", EntityCategory.LOCATION, 30, 32, 0.78)
+      ));
+      case "biography" -> entities.addAll(List.of(
+          buildEntity(text, "主人�?, EntityCategory.PERSON, 0, 3, 0.96),
+          buildEntity(text, "父亲", EntityCategory.PERSON, 10, 12, 0.82),
+          buildEntity(text, "官职", EntityCategory.ORGANIZATION, 40, 42, 0.75)
+      ));
+      default -> entities.addAll(List.of(
+          buildEntity(text, "主帅", EntityCategory.PERSON, 0, 2, 0.94),
+          buildEntity(text, "敌军", EntityCategory.ORGANIZATION, 20, 22, 0.78),
+          buildEntity(text, "战场", EntityCategory.LOCATION, 35, 37, 0.81)
+      ));
+    }
+    return entities;
+  }
+
+  private EntityAnnotation buildEntity(TextDocument text, String label, EntityCategory category,
+      int start, int end, double confidence) {
+    return EntityAnnotation.builder()
+        .textDocument(text)
+        .startOffset(start)
+        .endOffset(end)
+        .label(label)
+        .category(category)
+        .confidence(confidence)
+        .color("#d16a5d")
+        .build();
+  }
+
+  private List<RelationAnnotation> generateRelationsForCategory(TextDocument text,
+      List<EntityAnnotation> entities) {
+    if (entities.size() < 2) {
+      return List.of();
+    }
+    List<RelationAnnotation> relations = new ArrayList<>();
+    EntityAnnotation first = entities.get(0);
+    EntityAnnotation second = entities.get(1);
+    RelationAnnotation.RelationType relationType = switch (text.getCategory()) {
+      case "travelogue" -> RelationType.TRAVEL;
+      case "biography" -> RelationType.FAMILY;
+      default -> RelationType.CONFLICT;
+    };
+    relations.add(RelationAnnotation.builder()
+        .textDocument(text)
+        .source(first)
+        .target(second)
+        .relationType(relationType)
+        .confidence(0.72)
+        .evidence("示例推理")
+        .build());
+    return relations;
+  }
+}
+

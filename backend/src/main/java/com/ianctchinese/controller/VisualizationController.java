@@ -27,7 +27,8 @@ public class VisualizationController {
   }
 
   @GetMapping
-  public ResponseEntity<List<VisualizationPreset>> listPresets(@RequestParam(required = false) String category) {
+  public ResponseEntity<List<VisualizationPreset>> listPresets(
+      @RequestParam(name = "category", required = false) String category) {
     return ResponseEntity.ok(visualizationService.listPresets(category));
   }
 }

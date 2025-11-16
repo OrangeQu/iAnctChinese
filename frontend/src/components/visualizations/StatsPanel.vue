@@ -1,16 +1,7 @@
 <template>
   <section class="panel stats-panel">
     <h3 class="section-title">词频词云</h3>
-    <div class="word-cloud">
-      <span
-        v-for="word in words"
-        :key="word.label"
-        class="word"
-        :style="{ fontSize: `${word.weight * 8 + 12}px`, color: pickColor(word.weight) }"
-      >
-        {{ word.label }}
-      </span>
-    </div>
+    <WordCloudCanvas :words="words" />
     <el-divider />
     <h3 class="section-title">统计信息</h3>
     <ul>
@@ -23,6 +14,8 @@
 </template>
 
 <script setup>
+import WordCloudCanvas from "./WordCloudCanvas.vue";
+
 const props = defineProps({
   words: {
     type: Array,
@@ -42,29 +35,9 @@ const props = defineProps({
   }
 });
 
-const pickColor = (weight) => {
-  if (weight > 0.8) {
-    return "#c05621";
-  }
-  if (weight > 0.5) {
-    return "#8f6f35";
-  }
-  return "#5f6f7c";
-};
 </script>
 
 <style scoped>
-.word-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: 120px;
-}
-
-.word {
-  font-weight: 600;
-}
-
 ul {
   list-style: none;
   padding-left: 0;

@@ -85,10 +85,17 @@ const renderChart = () => {
         data: intensity,
         barWidth: 32,
         itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "#f6c189" },
-            { offset: 1, color: "#e77761" }
-          ]),
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: "#f6c189" },
+              { offset: 1, color: "#e77761" }
+            ]
+          },
           borderRadius: [12, 12, 0, 0]
         }
       },

@@ -27,7 +27,7 @@ public class ModelJobController {
   }
 
   @GetMapping
-  public ResponseEntity<List<ModelJob>> listJobs(@RequestParam Long textId) {
+  public ResponseEntity<List<ModelJob>> listJobs(@RequestParam("textId") Long textId) {
     return ResponseEntity.ok(modelJobService.listJobs(textId));
   }
 }

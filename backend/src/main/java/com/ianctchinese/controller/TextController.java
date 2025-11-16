@@ -37,12 +37,13 @@ public class TextController {
   }
 
   @GetMapping
-  public ResponseEntity<List<TextDocument>> listTexts(@RequestParam(required = false) String category) {
+  public ResponseEntity<List<TextDocument>> listTexts(
+      @RequestParam(name = "category", required = false) String category) {
     return ResponseEntity.ok(textService.listTexts(category));
   }
 
   @GetMapping("/search")
-  public ResponseEntity<List<TextDocument>> search(@RequestParam String keyword) {
+  public ResponseEntity<List<TextDocument>> search(@RequestParam("keyword") String keyword) {
     return ResponseEntity.ok(textService.searchTexts(keyword));
   }
 

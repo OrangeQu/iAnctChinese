@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface EntityAnnotationRepository extends JpaRepository<EntityAnnotation, Long> {
 
   List<EntityAnnotation> findByTextDocumentId(Long textId);
+
+  void deleteByTextDocumentId(Long textId);
 }

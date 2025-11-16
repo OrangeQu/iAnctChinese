@@ -22,7 +22,7 @@ public class DashboardController {
   private final RelationAnnotationRepository relationAnnotationRepository;
 
   @GetMapping("/overview")
-  public ResponseEntity<Map<String, Object>> overview(@RequestParam Long textId) {
+  public ResponseEntity<Map<String, Object>> overview(@RequestParam("textId") Long textId) {
     Map<String, Object> overview = new HashMap<>();
     overview.put("text", textDocumentRepository.findById(textId).orElse(null));
     overview.put("entityCount", entityAnnotationRepository.findByTextDocumentId(textId).size());

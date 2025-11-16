@@ -1,17 +1,19 @@
 <template>
   <div class="workspace" v-loading="store.loading">
-    <div class="top-grid">
+    <div class="stage-grid">
       <aside class="panel text-panel">
         <h3 class="section-title">原文</h3>
-      <div class="text-content">
-        <p v-for="(line, index) in lines" :key="index">
-          {{ line }}
-        </p>
-      </div>
-      <el-divider />
-      <el-button type="primary" @click="store.classifySelectedText">触发模型分析</el-button>
-      <el-button @click="store.triggerAutoAnnotation">自动生成示例标注</el-button>
+        <div v-if="store.selectedText?.content" class="text-content">
+          <pre class="raw-text">{{ store.selectedText.content }}</pre>
+        </div>
+        <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇。</p>
+        <el-divider />
+        <div class="action-row">
+          <el-button type="primary" @click="handleFullAnalysis">触发模型分析</el-button>
+          <el-button @click="store.triggerAutoAnnotation">自动生成示例标注</el-button>
+        </div>
       </aside>
+
       <section class="panel annotation-panel">
       <div class="annotation-section">
         <h3 class="section-title">实体标注</h3>
@@ -43,51 +45,52 @@
           <el-table-column prop="confidence" label="置信度" />
         </el-table>
       </div>
-      <el-divider />
-      <div class="annotation-section">
-        <h3 class="section-title">关系标注</h3>
-        <el-form :model="relationForm" inline class="form-inline">
-          <el-form-item label="实体A">
-            <el-select v-model="relationForm.sourceEntityId" placeholder="选择实体">
-              <el-option
-                v-for="entity in entities"
-                :label="entity.label"
-                :value="entity.id"
-                :key="entity.id"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="实体B">
-            <el-select v-model="relationForm.targetEntityId" placeholder="选择实体">
-              <el-option
-                v-for="entity in entities"
-                :label="entity.label"
-                :value="entity.id"
-                :key="`target-${entity.id}`"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="关系">
-            <el-select v-model="relationForm.relationType" placeholder="关系类型">
-              <el-option label="对抗" value="CONFLICT" />
-              <el-option label="结盟" value="SUPPORT" />
-              <el-option label="行旅" value="TRAVEL" />
-              <el-option label="亲属" value="FAMILY" />
-              <el-option label="时间" value="TEMPORAL" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="submitRelation">添加关系</el-button>
-          </el-form-item>
-        </el-form>
-        <el-table :data="relations" border size="small" height="200">
-          <el-table-column prop="source.label" label="实体A" />
-          <el-table-column prop="relationType" label="关系" width="140" />
-          <el-table-column prop="target.label" label="实体B" />
-        </el-table>
-      </div>
-    </section>
+        <el-divider />
+        <div class="annotation-section">
+          <h3 class="section-title">关系标注</h3>
+          <el-form :model="relationForm" inline class="form-inline">
+            <el-form-item label="实体A">
+              <el-select v-model="relationForm.sourceEntityId" placeholder="选择实体">
+                <el-option
+                  v-for="entity in entities"
+                  :label="entity.label"
+                  :value="entity.id"
+                  :key="entity.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="实体B">
+              <el-select v-model="relationForm.targetEntityId" placeholder="选择实体">
+                <el-option
+                  v-for="entity in entities"
+                  :label="entity.label"
+                  :value="entity.id"
+                  :key="`target-${entity.id}`"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="关系">
+              <el-select v-model="relationForm.relationType" placeholder="关系类型">
+                <el-option label="对抗" value="CONFLICT" />
+                <el-option label="结盟" value="SUPPORT" />
+                <el-option label="行旅" value="TRAVEL" />
+                <el-option label="亲属" value="FAMILY" />
+                <el-option label="时间" value="TEMPORAL" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="submitRelation">添加关系</el-button>
+            </el-form-item>
+          </el-form>
+          <el-table :data="relations" border size="small" height="200">
+            <el-table-column prop="source.label" label="实体A" />
+            <el-table-column prop="relationType" label="关系" width="140" />
+            <el-table-column prop="target.label" label="实体B" />
+          </el-table>
+        </div>
+      </section>
     </div>
+
     <SentencePanel
       :sections="sections"
       @auto-segment="handleAutoSegment"
@@ -110,7 +113,6 @@ if (route.params.id) {
   store.selectText(route.params.id);
 }
 
-const lines = computed(() => (store.selectedText?.content || "").split("。"));
 const entities = computed(() => store.entities);
 const relations = computed(() => store.relations);
 const sections = computed(() => store.sections);
@@ -173,6 +175,15 @@ const handleUpdateSection = async (section) => {
   });
   ElMessage.success("句读内容已更新");
 };
+
+const handleFullAnalysis = async () => {
+  try {
+    await store.runFullAnalysis();
+    ElMessage.success("模型分析完成，已更新标注与句读");
+  } catch (error) {
+    ElMessage.error("模型分析失败，请稍后重试");
+  }
+};
 </script>
 
 <style scoped>
@@ -182,7 +193,7 @@ const handleUpdateSection = async (section) => {
   gap: 16px;
 }
 
-.top-grid {
+.stage-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
@@ -194,6 +205,23 @@ const handleUpdateSection = async (section) => {
   line-height: 1.8;
   padding-right: 8px;
   color: var(--muted);
+}
+
+.raw-text {
+  white-space: pre-line;
+  margin: 0;
+  font-size: 15px;
+  color: #4a443e;
+}
+
+.placeholder {
+  color: var(--muted);
+  margin: 0;
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
 }
 
 .annotation-section {

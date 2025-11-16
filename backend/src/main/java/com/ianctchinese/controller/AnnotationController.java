@@ -34,12 +34,12 @@ public class AnnotationController {
   }
 
   @GetMapping("/entities")
-  public ResponseEntity<List<EntityAnnotation>> listEntities(@RequestParam Long textId) {
+  public ResponseEntity<List<EntityAnnotation>> listEntities(@RequestParam("textId") Long textId) {
     return ResponseEntity.ok(annotationService.getEntities(textId));
   }
 
   @GetMapping("/relations")
-  public ResponseEntity<List<RelationAnnotation>> listRelations(@RequestParam Long textId) {
+  public ResponseEntity<List<RelationAnnotation>> listRelations(@RequestParam("textId") Long textId) {
     return ResponseEntity.ok(annotationService.getRelations(textId));
   }
 }

@@ -11,3 +11,7 @@ export const autoAnnotate = (textId) => {
 export const fetchInsights = (textId) => {
   return apiClient.get(`/analysis/${textId}/insights`);
 };
+
+export const runFullAnalysis = (textId) => {
+  return apiClient.post(`/analysis/${textId}/full`);
+};

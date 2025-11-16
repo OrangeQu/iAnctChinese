@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { fetchTexts, fetchTextById, uploadText, updateTextCategory, exportText } from "@/api/texts";
 import { fetchEntities, fetchRelations, createEntity, createRelation } from "@/api/annotations";
-import { classifyText, fetchInsights, autoAnnotate } from "@/api/analysis";
+import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi } from "@/api/analysis";
 import { fetchSections, autoSegment, updateSection as updateSectionApi } from "@/api/sections";
 import { fetchNavigationTree } from "@/api/navigation";
 import { searchTexts } from "@/api/search";
@@ -63,24 +63,34 @@ export const useTextStore = defineStore("textStore", {
       this.selectedTextId = id;
       this.loading = true;
       try {
-        const [
-          { data: text },
-          { data: entityData },
-          { data: relationData },
-          { data: insightsData },
-          { data: sectionsData }
-        ] = await Promise.all([
-          fetchTextById(id),
+        const { data: text } = await fetchTextById(id);
+        this.selectedText = text;
+        const results = await Promise.allSettled([
           fetchEntities(id),
           fetchRelations(id),
           fetchInsights(id),
           fetchSections(id)
         ]);
-        this.selectedText = text;
-        this.entities = entityData;
-        this.relations = relationData;
-        this.insights = insightsData;
-        this.sections = sectionsData;
+        if (results[0].status === "fulfilled") {
+          this.entities = results[0].value.data;
+        } else {
+          this.entities = [];
+        }
+        if (results[1].status === "fulfilled") {
+          this.relations = results[1].value.data;
+        } else {
+          this.relations = [];
+        }
+        if (results[2].status === "fulfilled") {
+          this.insights = results[2].value.data;
+        } else {
+          this.insights = null;
+        }
+        if (results[3].status === "fulfilled") {
+          this.sections = results[3].value.data;
+        } else {
+          this.sections = [];
+        }
         this.filters.entityCategories = [...this.entityOptions];
         this.filters.relationTypes = [...this.relationOptions];
       } finally {
@@ -91,11 +101,27 @@ export const useTextStore = defineStore("textStore", {
       this.saving = true;
       try {
         const { data } = await uploadText(payload);
+        // 先本地落状态，保证界面立即显示原文
+        this.selectedTextId = data.id;
+        this.selectedText = data;
+        this.entities = [];
+        this.relations = [];
+        this.sections = [];
         this.texts.unshift(data);
-        await this.selectText(data.id);
         await this.loadNavigationTree();
       } finally {
         this.saving = false;
+      }
+    },
+    async refreshCurrentText() {
+      if (!this.selectedTextId) {
+        return;
+      }
+      this.loading = true;
+      try {
+        await this.selectText(this.selectedTextId);
+      } finally {
+        this.loading = false;
       }
     },
     async createEntityAnnotation(payload) {
@@ -120,6 +146,42 @@ export const useTextStore = defineStore("textStore", {
       }
       await autoAnnotate(this.selectedTextId);
       await this.selectText(this.selectedTextId);
+    },
+    async runFullAnalysis() {
+      if (!this.selectedTextId) {
+        return;
+      }
+      this.loading = true;
+      try {
+        const { data } = await runFullAnalysisApi(this.selectedTextId);
+        this.classification = data.classification;
+        this.insights = data.insights;
+        this.sections = data.sections || [];
+
+        if (data.classification?.suggestedCategory) {
+          if (this.selectedText) {
+            this.selectedText.category = data.classification.suggestedCategory;
+          }
+          const idx = this.texts.findIndex((item) => item.id === this.selectedTextId);
+          if (idx >= 0) {
+            this.texts[idx].category = data.classification.suggestedCategory;
+          }
+        }
+
+        const results = await Promise.allSettled([
+          fetchEntities(this.selectedTextId),
+          fetchRelations(this.selectedTextId)
+        ]);
+        this.entities = results[0].status === "fulfilled" ? results[0].value.data : [];
+        this.relations = results[1].status === "fulfilled" ? results[1].value.data : [];
+        this.filters.entityCategories = [...this.entityOptions];
+        this.filters.relationTypes = [...this.relationOptions];
+
+        // 导航树受分类变更影响，重新加载
+        await this.loadNavigationTree();
+      } finally {
+        this.loading = false;
+      }
     },
     async updateSelectedCategory(category) {
       if (!this.selectedTextId) {

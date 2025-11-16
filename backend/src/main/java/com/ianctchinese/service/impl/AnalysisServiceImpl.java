@@ -2,11 +2,21 @@ package com.ianctchinese.service.impl;
 
 import com.ianctchinese.dto.AutoAnnotationResponse;
 import com.ianctchinese.dto.ClassificationResponse;
+import com.ianctchinese.dto.ModelAnalysisResponse;
+import com.ianctchinese.dto.SentenceSegmentRequest;
 import com.ianctchinese.dto.TextInsightsResponse;
+import com.ianctchinese.dto.TextInsightsResponse.BattleEvent;
+import com.ianctchinese.dto.TextInsightsResponse.FamilyNode;
 import com.ianctchinese.dto.TextInsightsResponse.MapPathPoint;
 import com.ianctchinese.dto.TextInsightsResponse.Stats;
 import com.ianctchinese.dto.TextInsightsResponse.TimelineEvent;
 import com.ianctchinese.dto.TextInsightsResponse.WordCloudItem;
+import com.ianctchinese.llm.DeepSeekClient;
+import com.ianctchinese.llm.dto.AnnotationPayload;
+import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationEntity;
+import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationRelation;
+import com.ianctchinese.llm.dto.ClassificationPayload;
+import com.ianctchinese.llm.dto.SentenceSuggestion;
 import com.ianctchinese.model.EntityAnnotation;
 import com.ianctchinese.model.EntityAnnotation.EntityCategory;
 import com.ianctchinese.model.RelationAnnotation;
@@ -18,11 +28,14 @@ import com.ianctchinese.repository.RelationAnnotationRepository;
 import com.ianctchinese.repository.TextDocumentRepository;
 import com.ianctchinese.repository.TextSectionRepository;
 import com.ianctchinese.service.AnalysisService;
+import com.ianctchinese.service.TextSectionService;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,32 +48,30 @@ public class AnalysisServiceImpl implements AnalysisService {
   private static final Map<String, String> CATEGORY_LABELS = Map.of(
       "warfare", "战争纪实",
       "travelogue", "游记地理",
-      "biography", "人物传记"
+      "biography", "人物传记",
+      "unknown", "综合待识别"
   );
 
   private final TextDocumentRepository textDocumentRepository;
   private final EntityAnnotationRepository entityAnnotationRepository;
   private final RelationAnnotationRepository relationAnnotationRepository;
   private final TextSectionRepository textSectionRepository;
+  private final TextSectionService textSectionService;
+  private final DeepSeekClient deepSeekClient;
 
   @Override
   @Transactional
   public ClassificationResponse classifyText(Long textId) {
-    TextDocument text = loadText(textId);
-    Map<String, Integer> scoreMap = calculateCategoryScores(text.getContent());
-    String category = scoreMap.entrySet().stream()
-        .max(Map.Entry.comparingByValue())
-        .map(Map.Entry::getKey)
-        .orElse(text.getCategory());
-    double confidence = calculateConfidence(scoreMap, category);
-    text.setCategory(category);
-    textDocumentRepository.save(text);
-    List<String> reasons = buildReasons(category);
+    TextDocument document = loadText(textId);
+    ClassificationPayload payload = deepSeekClient.classifyText(document.getContent());
+    String normalizedCategory = normalizeCategory(payload.getCategory(), document.getCategory());
+    document.setCategory(normalizedCategory);
+    textDocumentRepository.save(document);
     return ClassificationResponse.builder()
         .textId(textId)
-        .suggestedCategory(category)
-        .confidence(confidence)
-        .reasons(reasons)
+        .suggestedCategory(normalizedCategory)
+        .confidence(payload.getConfidence())
+        .reasons(payload.getReasons())
         .build();
   }
 
@@ -77,12 +88,12 @@ public class AnalysisServiceImpl implements AnalysisService {
         .punctuationProgress(calculatePunctuationProgress(sections))
         .build();
 
-    List<WordCloudItem> wordCloud = buildWordCloud(text.getContent());
+    List<WordCloudItem> wordCloud = buildWordCloud(entities, text.getContent());
     List<TimelineEvent> timeline = buildTimelineForCategory(text.getCategory());
     List<MapPathPoint> mapPoints = buildMapPointsForCategory(text.getCategory());
     List<String> recommendedViews = buildRecommendedViews(text.getCategory());
-    List<TextInsightsResponse.BattleEvent> battleTimeline = buildBattleTimeline(text.getCategory());
-    List<TextInsightsResponse.FamilyNode> familyTree = buildFamilyTree(text.getCategory());
+    List<BattleEvent> battleTimeline = buildBattleTimeline(text.getCategory());
+    List<FamilyNode> familyTree = buildFamilyTree(text.getCategory());
 
     return TextInsightsResponse.builder()
         .textId(textId)
@@ -101,29 +112,93 @@ public class AnalysisServiceImpl implements AnalysisService {
   @Override
   @Transactional
   public AutoAnnotationResponse autoAnnotate(Long textId) {
-    TextDocument text = loadText(textId);
-    List<EntityAnnotation> existingEntities = entityAnnotationRepository.findByTextDocumentId(textId);
-    if (!existingEntities.isEmpty()) {
-      return AutoAnnotationResponse.builder()
-          .textId(textId)
-          .createdEntities(0)
-          .createdRelations(0)
-          .message("已有实体标注，已跳过自动生成。")
-          .build();
+    TextDocument document = loadText(textId);
+    AnnotationPayload payload = deepSeekClient.annotateText(document.getContent());
+    relationAnnotationRepository.deleteByTextDocumentId(textId);
+    entityAnnotationRepository.deleteByTextDocumentId(textId);
+
+    List<EntityAnnotation> entities = saveEntities(document, payload.getEntities());
+    List<RelationAnnotation> relations = saveRelations(document, payload.getRelations(), entities);
+
+    if (!payload.getSentences().isEmpty()) {
+      textSectionService.replaceSections(textId, toSegmentRequests(textId, payload.getSentences()));
     }
-
-    List<EntityAnnotation> generatedEntities = generateEntitiesForCategory(text);
-    entityAnnotationRepository.saveAll(generatedEntities);
-
-    List<RelationAnnotation> generatedRelations = generateRelationsForCategory(text, generatedEntities);
-    relationAnnotationRepository.saveAll(generatedRelations);
 
     return AutoAnnotationResponse.builder()
         .textId(textId)
-        .createdEntities(generatedEntities.size())
-        .createdRelations(generatedRelations.size())
-        .message("已根据文本类型生成示例标注，可在前端继续校对。")
+        .createdEntities(entities.size())
+        .createdRelations(relations.size())
+        .message("模型已生成实体、关系与句读，可在前端继续校对。")
         .build();
+  }
+
+  @Override
+  @Transactional
+  public ModelAnalysisResponse runFullAnalysis(Long textId) {
+    ClassificationResponse classification = classifyText(textId);
+    AutoAnnotationResponse annotation = autoAnnotate(textId);
+    TextInsightsResponse insights = buildInsights(textId);
+    List<TextSection> sections = textSectionRepository.findByTextDocumentId(textId);
+    return ModelAnalysisResponse.builder()
+        .classification(classification)
+        .annotation(annotation)
+        .insights(insights)
+        .sections(sections)
+        .build();
+  }
+
+  private List<SentenceSegmentRequest> toSegmentRequests(Long textId, List<SentenceSuggestion> suggestions) {
+    List<SentenceSegmentRequest> requests = new ArrayList<>();
+    int index = 1;
+    for (SentenceSuggestion suggestion : suggestions) {
+      SentenceSegmentRequest request = new SentenceSegmentRequest();
+      request.setTextId(textId);
+      request.setSequenceIndex(index++);
+      request.setOriginalText(Optional.ofNullable(suggestion.getOriginal()).orElse(suggestion.getPunctuated()));
+      request.setPunctuatedText(suggestion.getPunctuated());
+      request.setSummary(suggestion.getSummary());
+      requests.add(request);
+    }
+    return requests;
+  }
+
+  private List<EntityAnnotation> saveEntities(TextDocument document, List<AnnotationEntity> payloadEntities) {
+    List<EntityAnnotation> entities = payloadEntities.stream()
+        .map(item -> EntityAnnotation.builder()
+            .textDocument(document)
+            .label(item.getLabel())
+            .startOffset(Optional.ofNullable(item.getStartOffset()).orElse(0))
+            .endOffset(Optional.ofNullable(item.getEndOffset()).orElse(0))
+            .category(resolveCategory(item.getCategory()))
+            .confidence(item.getConfidence())
+            .color("#d16a5d")
+            .build())
+        .collect(Collectors.toList());
+    return entityAnnotationRepository.saveAll(entities);
+  }
+
+  private List<RelationAnnotation> saveRelations(TextDocument document,
+      List<AnnotationRelation> payloadRelations,
+      List<EntityAnnotation> entities) {
+    Map<String, EntityAnnotation> entityLookup = entities.stream()
+        .collect(Collectors.toMap(EntityAnnotation::getLabel, e -> e, (a, b) -> a));
+    List<RelationAnnotation> relations = new ArrayList<>();
+    for (AnnotationRelation relation : payloadRelations) {
+      EntityAnnotation source = entityLookup.get(relation.getSourceLabel());
+      EntityAnnotation target = entityLookup.get(relation.getTargetLabel());
+      if (source == null || target == null) {
+        continue;
+      }
+      relations.add(RelationAnnotation.builder()
+          .textDocument(document)
+          .source(source)
+          .target(target)
+          .relationType(resolveRelation(relation.getRelationType()))
+          .confidence(relation.getConfidence())
+          .evidence(relation.getDescription())
+          .build());
+    }
+    return relationAnnotationRepository.saveAll(relations);
   }
 
   private TextDocument loadText(Long textId) {
@@ -131,44 +206,48 @@ public class AnalysisServiceImpl implements AnalysisService {
         .orElseThrow(() -> new IllegalArgumentException("Text not found: " + textId));
   }
 
-  private Map<String, Integer> calculateCategoryScores(String content) {
-    Map<String, List<String>> keywordMap = new HashMap<>();
-    keywordMap.put("warfare", List.of("战", "军", "攻", "守", "兵", "城", "矢"));
-    keywordMap.put("travelogue", List.of("山", "水", "江", "湖", "行", "至", "游", "路", "舟"));
-    keywordMap.put("biography", List.of("生", "卒", "仕", "官", "字", "年", "家", "传"));
-
-    Map<String, Integer> scores = new HashMap<>();
-    keywordMap.forEach((category, keywords) -> {
-      int score = 0;
-      for (String keyword : keywords) {
-        score += countOccurrences(content, keyword);
-      }
-      scores.put(category, score);
-    });
-    return scores;
-  }
-
-  private int countOccurrences(String content, String keyword) {
-    return content.length() - content.replace(keyword, "").length();
-  }
-
-  private double calculateConfidence(Map<String, Integer> scores, String category) {
-    int bestScore = scores.getOrDefault(category, 1);
-    int total = scores.values().stream().mapToInt(Integer::intValue).sum();
-    if (total == 0) {
-      return 0.5;
+  private String normalizeCategory(String category, String fallback) {
+    if (category == null || category.isBlank()) {
+      return Optional.ofNullable(fallback).orElse("unknown");
     }
-    return Math.min(0.95, (double) bestScore / total);
+    String normalized = category.toLowerCase(Locale.ROOT);
+    return switch (normalized) {
+      case "warfare", "travelogue", "biography" -> normalized;
+      default -> Optional.ofNullable(fallback).orElse("unknown");
+    };
   }
 
-  private List<String> buildReasons(String category) {
-    String label = CATEGORY_LABELS.getOrDefault(category, "综合");
-    return List.of("文本特征与 " + label + " 语料高度相似", "关键实体与关系模式匹配该类型");
+  private EntityCategory resolveCategory(String category) {
+    if (category == null) {
+      return EntityCategory.CUSTOM;
+    }
+    return switch (category.toUpperCase(Locale.ROOT)) {
+      case "PERSON" -> EntityCategory.PERSON;
+      case "LOCATION" -> EntityCategory.LOCATION;
+      case "EVENT" -> EntityCategory.EVENT;
+      case "ORGANIZATION" -> EntityCategory.ORGANIZATION;
+      case "OBJECT" -> EntityCategory.OBJECT;
+      default -> EntityCategory.CUSTOM;
+    };
+  }
+
+  private RelationType resolveRelation(String relationType) {
+    if (relationType == null) {
+      return RelationType.CUSTOM;
+    }
+    return switch (relationType.toUpperCase(Locale.ROOT)) {
+      case "CONFLICT" -> RelationType.CONFLICT;
+      case "SUPPORT" -> RelationType.SUPPORT;
+      case "TRAVEL" -> RelationType.TRAVEL;
+      case "FAMILY" -> RelationType.FAMILY;
+      case "TEMPORAL" -> RelationType.TEMPORAL;
+      default -> RelationType.CUSTOM;
+    };
   }
 
   private Double calculatePunctuationProgress(List<TextSection> sections) {
     if (sections.isEmpty()) {
-      return 0.1;
+      return 0.05;
     }
     long completed = sections.stream()
         .filter(section -> section.getPunctuatedText() != null && !section.getPunctuatedText().isBlank())
@@ -176,7 +255,26 @@ public class AnalysisServiceImpl implements AnalysisService {
     return (double) completed / sections.size();
   }
 
-  private List<WordCloudItem> buildWordCloud(String content) {
+  private List<WordCloudItem> buildWordCloud(List<EntityAnnotation> entities, String content) {
+    if (entities != null && !entities.isEmpty()) {
+      Map<String, Integer> freq = new HashMap<>();
+      entities.forEach(e -> {
+        if (e.getLabel() != null && !e.getLabel().isBlank()) {
+          freq.merge(e.getLabel(), 1, Integer::sum);
+        }
+      });
+      int max = freq.values().stream().max(Integer::compareTo).orElse(1);
+      return freq.entrySet().stream()
+          .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+          .limit(12)
+          .map(entry -> WordCloudItem.builder()
+              .label(entry.getKey())
+              .weight(0.6 + 0.4 * (entry.getValue() / (double) max))
+              .build())
+          .collect(Collectors.toList());
+    }
+
+    // 回退到基于文本的简易词频
     String[] tokens = content.split("[，。、；：？！\\s]");
     Map<String, Integer> frequency = new HashMap<>();
     for (String token : tokens) {
@@ -185,12 +283,13 @@ public class AnalysisServiceImpl implements AnalysisService {
       }
       frequency.merge(token, 1, Integer::sum);
     }
+    int max = frequency.values().stream().max(Integer::compareTo).orElse(1);
     return frequency.entrySet().stream()
         .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
         .limit(12)
         .map(entry -> WordCloudItem.builder()
             .label(entry.getKey())
-            .weight(entry.getValue() / 10.0 + 0.3)
+            .weight(0.6 + 0.4 * (entry.getValue() / (double) max))
             .build())
         .collect(Collectors.toList());
   }
@@ -219,7 +318,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   private List<MapPathPoint> buildMapPointsForCategory(String category) {
     if (!"travelogue".equals(category)) {
-      return List.of();
+      return Collections.emptyList();
     }
     return List.of(
         MapPathPoint.builder().label("长安").latitude(34.3416).longitude(108.9398).sequence(1).build(),
@@ -229,24 +328,24 @@ public class AnalysisServiceImpl implements AnalysisService {
     );
   }
 
-  private List<TextInsightsResponse.BattleEvent> buildBattleTimeline(String category) {
+  private List<BattleEvent> buildBattleTimeline(String category) {
     if (!"warfare".equals(category)) {
-      return List.of();
+      return Collections.emptyList();
     }
     return List.of(
-        TextInsightsResponse.BattleEvent.builder()
+        BattleEvent.builder()
             .phase("先声夺人")
             .description("奇兵夜袭，对手措手不及")
             .intensity(6)
             .opponent("北军")
             .build(),
-        TextInsightsResponse.BattleEvent.builder()
+        BattleEvent.builder()
             .phase("火攻突袭")
             .description("顺风纵火，焚毁敌营")
             .intensity(9)
             .opponent("曹营")
             .build(),
-        TextInsightsResponse.BattleEvent.builder()
+        BattleEvent.builder()
             .phase("追击与议和")
             .description("乘胜北伐，并商议城下之盟")
             .intensity(7)
@@ -255,39 +354,26 @@ public class AnalysisServiceImpl implements AnalysisService {
     );
   }
 
-  private List<TextInsightsResponse.FamilyNode> buildFamilyTree(String category) {
+  private List<FamilyNode> buildFamilyTree(String category) {
     if (!"biography".equals(category)) {
-      return List.of();
+      return Collections.emptyList();
     }
     return List.of(
-        TextInsightsResponse.FamilyNode.builder()
+        FamilyNode.builder()
             .name("祖父")
             .relation("祖")
             .children(List.of(
-                TextInsightsResponse.FamilyNode.builder()
+                FamilyNode.builder()
                     .name("父亲")
                     .relation("父")
                     .children(List.of(
-                        TextInsightsResponse.FamilyNode.builder()
+                        FamilyNode.builder()
                             .name("主人公")
                             .relation("本人")
                             .children(List.of(
-                                TextInsightsResponse.FamilyNode.builder()
-                                    .name("长子")
-                                    .relation("子")
-                                    .children(List.of())
-                                    .build(),
-                                TextInsightsResponse.FamilyNode.builder()
-                                    .name("次女")
-                                    .relation("女")
-                                    .children(List.of())
-                                    .build()
+                                FamilyNode.builder().name("长子").relation("子").children(List.of()).build(),
+                                FamilyNode.builder().name("次女").relation("女").children(List.of()).build()
                             ))
-                            .build(),
-                        TextInsightsResponse.FamilyNode.builder()
-                            .name("妹")
-                            .relation("妹")
-                            .children(List.of())
                             .build()
                     ))
                     .build()
@@ -312,64 +398,5 @@ public class AnalysisServiceImpl implements AnalysisService {
         stats.getEntityCount(),
         stats.getRelationCount(),
         String.join(" / ", buildRecommendedViews(text.getCategory())));
-  }
-
-  private List<EntityAnnotation> generateEntitiesForCategory(TextDocument text) {
-    List<EntityAnnotation> entities = new ArrayList<>();
-    switch (text.getCategory()) {
-      case "travelogue" -> entities.addAll(List.of(
-          buildEntity(text, "作者", EntityCategory.PERSON, 0, 2, 0.95),
-          buildEntity(text, "名山", EntityCategory.LOCATION, 15, 17, 0.8),
-          buildEntity(text, "江河", EntityCategory.LOCATION, 30, 32, 0.78)
-      ));
-      case "biography" -> entities.addAll(List.of(
-          buildEntity(text, "主人公", EntityCategory.PERSON, 0, 3, 0.96),
-          buildEntity(text, "父亲", EntityCategory.PERSON, 10, 12, 0.82),
-          buildEntity(text, "官职", EntityCategory.ORGANIZATION, 40, 42, 0.75)
-      ));
-      default -> entities.addAll(List.of(
-          buildEntity(text, "主帅", EntityCategory.PERSON, 0, 2, 0.94),
-          buildEntity(text, "敌军", EntityCategory.ORGANIZATION, 20, 22, 0.78),
-          buildEntity(text, "战场", EntityCategory.LOCATION, 35, 37, 0.81)
-      ));
-    }
-    return entities;
-  }
-
-  private EntityAnnotation buildEntity(TextDocument text, String label, EntityCategory category,
-      int start, int end, double confidence) {
-    return EntityAnnotation.builder()
-        .textDocument(text)
-        .startOffset(start)
-        .endOffset(end)
-        .label(label)
-        .category(category)
-        .confidence(confidence)
-        .color("#d16a5d")
-        .build();
-  }
-
-  private List<RelationAnnotation> generateRelationsForCategory(TextDocument text,
-      List<EntityAnnotation> entities) {
-    if (entities.size() < 2) {
-      return List.of();
-    }
-    List<RelationAnnotation> relations = new ArrayList<>();
-    EntityAnnotation first = entities.get(0);
-    EntityAnnotation second = entities.get(1);
-    RelationAnnotation.RelationType relationType = switch (text.getCategory()) {
-      case "travelogue" -> RelationType.TRAVEL;
-      case "biography" -> RelationType.FAMILY;
-      default -> RelationType.CONFLICT;
-    };
-    relations.add(RelationAnnotation.builder()
-        .textDocument(text)
-        .source(first)
-        .target(second)
-        .relationType(relationType)
-        .confidence(0.72)
-        .evidence("示例推理")
-        .build());
-    return relations;
   }
 }

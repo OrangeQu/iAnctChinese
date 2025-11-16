@@ -11,6 +11,8 @@ public interface TextSectionService {
 
   List<TextSection> autoSegment(Long textId);
 
+  List<TextSection> replaceSections(Long textId, List<SentenceSegmentRequest> segments);
+
   TextSection createSection(SentenceSegmentRequest request);
 
   TextSection updateSection(Long sectionId, SentenceUpdateRequest request);

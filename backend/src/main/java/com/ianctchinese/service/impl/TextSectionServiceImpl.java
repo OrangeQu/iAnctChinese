@@ -10,6 +10,7 @@ import com.ianctchinese.service.TextSectionService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +52,31 @@ public class TextSectionServiceImpl implements TextSectionService {
           .summary(trimmed.length() > 20 ? trimmed.substring(0, 20) + "…" : trimmed)
           .build();
       sections.add(section);
+    }
+    return textSectionRepository.saveAll(sections);
+  }
+
+  @Override
+  @Transactional
+  public List<TextSection> replaceSections(Long textId, List<SentenceSegmentRequest> segments) {
+    textSectionRepository.deleteByTextDocumentId(textId);
+    TextDocument document = textDocumentRepository.findById(textId)
+        .orElseThrow(() -> new IllegalArgumentException("Text not found: " + textId));
+    List<TextSection> sections = new ArrayList<>();
+    int index = 1;
+    for (SentenceSegmentRequest segment : segments) {
+      if (segment.getOriginalText() == null || segment.getOriginalText().isBlank()) {
+        continue;
+      }
+      TextSection section = TextSection.builder()
+          .textDocument(document)
+          .sequenceIndex(Optional.ofNullable(segment.getSequenceIndex()).orElse(index))
+          .originalText(segment.getOriginalText())
+          .punctuatedText(segment.getPunctuatedText())
+          .summary(segment.getSummary())
+          .build();
+      sections.add(section);
+      index++;
     }
     return textSectionRepository.saveAll(sections);
   }
