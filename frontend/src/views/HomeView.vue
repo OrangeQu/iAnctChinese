@@ -13,6 +13,7 @@
             <router-link to="/login" class="navbar-button">登录</router-link>
           </template>
           <template v-else>
+            <router-link to="/documents" class="navbar-button">文档管理</router-link>
             <span class="navbar-user">{{ authStore.user?.username || '已登录' }}</span>
             <button class="navbar-button navbar-logout" @click="handleLogout">退出登录</button>
           </template>

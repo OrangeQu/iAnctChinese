@@ -21,3 +21,7 @@ export const updateTextCategory = (id, category) => {
 export const exportText = (id) => {
   return apiClient.get(`/texts/${id}/export`, { responseType: "blob" });
 };
+
+export const deleteText = (id) => {
+  return apiClient.delete(`/texts/${id}`);
+};

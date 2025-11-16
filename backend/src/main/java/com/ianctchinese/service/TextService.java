@@ -15,4 +15,6 @@ public interface TextService {
   TextDocument updateCategory(Long id, String category);
 
   List<TextDocument> searchTexts(String keyword);
+
+  void deleteText(Long id);
 }

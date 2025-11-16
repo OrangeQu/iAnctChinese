@@ -10,7 +10,19 @@
         <el-divider />
         <div class="action-row">
           <el-button type="primary" @click="handleFullAnalysis">触发模型分析</el-button>
+          <el-button type="warning" plain @click="handleClassify">大模型判断类型</el-button>
           <el-button @click="store.triggerAutoAnnotation">自动生成示例标注</el-button>
+        </div>
+        <div v-if="store.classification?.suggestedCategory" class="classification-tip">
+          <el-alert title="模型分析建议" type="info" :closable="false" show-icon>
+            <template #default>
+              <p>当前类型：<strong>{{ translateCategory(store.selectedText?.category) }}</strong></p>
+              <p>
+                模型建议：<strong>{{ translateCategory(store.classification.suggestedCategory) }}</strong>
+                （置信度：{{ ((store.classification.confidence || 0) * 100).toFixed(1) }}%）
+              </p>
+            </template>
+          </el-alert>
         </div>
       </aside>
 
@@ -100,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed, reactive } from "vue";
+import { computed, reactive, watch, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { ElMessage } from "element-plus";
@@ -109,9 +121,27 @@ import SentencePanel from "@/components/visualizations/SentencePanel.vue";
 const route = useRoute();
 const store = useTextStore();
 
-if (route.params.id) {
-  store.selectText(route.params.id);
-}
+const loadText = async (id) => {
+  if (!id) {
+    return;
+  }
+  try {
+    await store.selectText(id);
+  } catch (error) {
+    console.error("Failed to load text", error);
+  }
+};
+
+onMounted(async () => {
+  await loadText(route.params.id);
+});
+
+watch(
+  () => route.params.id,
+  async (id) => {
+    await loadText(id);
+  }
+);
 
 const entities = computed(() => store.entities);
 const relations = computed(() => store.relations);
@@ -184,6 +214,26 @@ const handleFullAnalysis = async () => {
     ElMessage.error("模型分析失败，请稍后重试");
   }
 };
+
+const handleClassify = async () => {
+  try {
+    await store.classifySelectedText();
+    ElMessage.success("模型已完成类型判断");
+  } catch (error) {
+    ElMessage.error("类型判断失败，请稍后重试");
+  }
+};
+
+const translateCategory = (category) => {
+  const map = {
+    warfare: "战争纪实",
+    travelogue: "游记地理",
+    biography: "人物传记",
+    unknown: "待识别",
+    other: "其他"
+  };
+  return map[category] || category || "未知";
+};
 </script>
 
 <style scoped>
@@ -222,6 +272,11 @@ const handleFullAnalysis = async () => {
 .action-row {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.classification-tip {
+  margin-top: 12px;
 }
 
 .annotation-section {

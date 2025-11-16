@@ -150,7 +150,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
 import { ArrowDown } from '@element-plus/icons-vue';
@@ -167,6 +167,7 @@ import BattleTimelineView from "@/components/visualizations/BattleTimelineView.v
 import TextWorkspace from "./TextWorkspace.vue";
 
 const router = useRouter();
+const route = useRoute();
 const store = useTextStore();
 const authStore = useAuthStore();
 const viewType = ref("stats");
@@ -196,7 +197,22 @@ onMounted(async () => {
   if (!store.texts.length || !store.navigationTree) {
     await store.initDashboard();
   }
+  if (!store.selectedTextId && store.texts.length) {
+    await store.selectText(store.texts[0].id);
+  }
+  if (route.params.id) {
+    await store.selectText(route.params.id);
+  }
 });
+
+watch(
+  () => route.params.id,
+  async (id) => {
+    if (id) {
+      await store.selectText(id);
+    }
+  }
+);
 
 watch(
   () => store.searchVersion,

@@ -11,38 +11,44 @@ import com.ianctchinese.llm.dto.SentenceSuggestion;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.web.client.RestTemplate;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class DeepSeekClient {
+public class HuggingFaceClient {
 
-  private static final String API_URL = "https://api.deepseek.com/v1/chat/completions";
+  private static final String API_BASE = "https://api-inference.huggingface.co/models/";
+
   private final RestTemplateBuilder restTemplateBuilder;
   private final ObjectMapper objectMapper;
 
   private RestTemplate restTemplate;
 
-  @Value("${deepseek.api-key:}")
-  private String apiKey;
+  @Value("${huggingface.api-token:}")
+  private String apiToken;
+
+  @Value("${huggingface.model:Qwen/Qwen-0.6B}")
+  private String model;
 
   private RestTemplate restTemplate() {
     if (restTemplate == null) {
       restTemplate = restTemplateBuilder
-          .setConnectTimeout(Duration.ofSeconds(20))
-          .setReadTimeout(Duration.ofSeconds(60))
+          .setConnectTimeout(Duration.ofSeconds(30))
+          .setReadTimeout(Duration.ofSeconds(90))
           .build();
     }
     return restTemplate;
@@ -71,13 +77,13 @@ public class DeepSeekClient {
           .reasons(reasons)
           .build();
     } catch (Exception ex) {
-      log.warn("DeepSeek classifyText error: {}", ex.getMessage());
+      log.warn("HuggingFace classifyText error: {}", ex.getMessage());
       return defaultClassification();
     }
   }
 
   public AnnotationPayload annotateText(String textContent) {
-    String systemPrompt = "你是一名古籍标注助手，需要同时完成实体抽取、关系抽取、句读建议及词频统计。请务必输出至少1-3条关系（如果文本确实没有明确关系，可给出空数组，但尽量挖掘人物/地点/事件之间的连接），并保证关系的 sourceLabel/targetLabel 必须出现在 entities 的 label 中。词频词云请输出简短词条（2-6字），避免整句。";
+    String systemPrompt = "你是一名古籍标注助手，需要同时完成实体抽取、关系抽取、句读建议及词频统计。请输出严格 JSON，并保证关系中的实体在实体列表出现。";
     String userPrompt = """
         请只输出 JSON，格式如下：
         {
@@ -87,9 +93,9 @@ public class DeepSeekClient {
           "wordCloud":[{"label":"","weight":0.8}]
         }
         要求：
-        1) 词云词条保持在2-6字，weight 介于0.3-1。
-        2) 关系关系类型可用 family/friend/rival/location/event/depend 等，描述简要说明。
-        3) 保持 JSON 严格闭合。
+        1) 词云词条保持 2-6 字，weight 介于 0.3-1；
+        2) 关系类型可用 family/friend/rival/location/event/depend/custom；
+        3) JSON 必须严格闭合；
         文本：
         %s
         """.formatted(textContent);
@@ -144,7 +150,7 @@ public class DeepSeekClient {
           .wordCloud(wordCloudItems)
           .build();
     } catch (Exception ex) {
-      log.warn("DeepSeek annotateText error: {}", ex.getMessage());
+      log.warn("HuggingFace annotateText error: {}", ex.getMessage());
       return AnnotationPayload.builder().build();
     }
   }
@@ -158,21 +164,45 @@ public class DeepSeekClient {
   }
 
   private JsonNode sendAndParse(String systemPrompt, String userPrompt) throws Exception {
+    String prompt = "System:\n" + systemPrompt + "\nUser:\n" + userPrompt;
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("inputs", prompt);
+
+    Map<String, Object> parameters = new HashMap<>();
+    parameters.put("temperature", 0.2);
+    parameters.put("max_new_tokens", 768);
+    payload.put("parameters", parameters);
+    payload.put("options", Map.of("wait_for_model", true));
+
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(Optional.ofNullable(apiKey).orElse(""));
+    headers.setBearerAuth(Optional.ofNullable(apiToken).orElse(""));
 
-    DeepSeekRequest request = DeepSeekRequest.of(systemPrompt, userPrompt);
-    HttpEntity<DeepSeekRequest> entity = new HttpEntity<>(request, headers);
-    ResponseEntity<DeepSeekResponse> response = restTemplate().postForEntity(API_URL, entity,
-        DeepSeekResponse.class);
-    if (response.getBody() == null
-        || response.getBody().getChoices() == null
-        || response.getBody().getChoices().isEmpty()) {
-      log.warn("DeepSeek 无返回内容，status={}", response.getStatusCode());
+    HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+    ResponseEntity<String> response =
+        restTemplate().postForEntity(API_BASE + model, entity, String.class);
+
+    if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+      log.warn("HuggingFace 无返回内容，status={}", response.getStatusCode());
       return null;
     }
-    String content = response.getBody().getChoices().get(0).getMessage().content();
+    return parseJsonFromBody(response.getBody());
+  }
+
+  private JsonNode parseJsonFromBody(String body) throws Exception {
+    JsonNode root = objectMapper.readTree(body);
+    if (root.has("error")) {
+      log.warn("HuggingFace inference error: {}", root.get("error").asText());
+      return null;
+    }
+    String content = null;
+    if (root.isArray() && root.size() > 0) {
+      content = root.get(0).path("generated_text").asText();
+    } else if (root.has("generated_text")) {
+      content = root.path("generated_text").asText();
+    } else {
+      content = root.toString();
+    }
     return parseJson(content);
   }
 
@@ -186,58 +216,13 @@ public class DeepSeekClient {
     try {
       return objectMapper.readTree(json);
     } catch (Exception parseEx) {
-      log.warn("DeepSeek 结果解析失败，尝试忽略尾部噪声: {}", parseEx.getMessage());
+      log.warn("HuggingFace 结果解析失败，尝试兜底: {}", parseEx.getMessage());
       String trimmed = json + (json.endsWith("}") ? "" : "}");
       try {
         return objectMapper.readTree(trimmed);
       } catch (Exception ignored) {
         return null;
       }
-    }
-  }
-
-  private record DeepSeekRequest(String model, List<Message> messages, double temperature,
-                                 int max_tokens) {
-
-    static DeepSeekRequest of(String systemPrompt, String userPrompt) {
-      return new DeepSeekRequest(
-          "deepseek-chat",
-          List.of(
-              new Message("system", systemPrompt),
-              new Message("user", userPrompt)
-          ),
-          0.2,
-          2048
-      );
-    }
-  }
-
-  private record Message(String role, String content) {
-  }
-
-  private static class DeepSeekResponse {
-
-    private List<Choice> choices;
-
-    public List<Choice> getChoices() {
-      return choices;
-    }
-
-    public void setChoices(List<Choice> choices) {
-      this.choices = choices;
-    }
-  }
-
-  private static class Choice {
-
-    private Message message;
-
-    public Message getMessage() {
-      return message;
-    }
-
-    public void setMessage(Message message) {
-      this.message = message;
     }
   }
 }

@@ -11,7 +11,7 @@ import com.ianctchinese.dto.TextInsightsResponse.MapPathPoint;
 import com.ianctchinese.dto.TextInsightsResponse.Stats;
 import com.ianctchinese.dto.TextInsightsResponse.TimelineEvent;
 import com.ianctchinese.dto.TextInsightsResponse.WordCloudItem;
-import com.ianctchinese.llm.DeepSeekClient;
+import com.ianctchinese.llm.HuggingFaceClient;
 import com.ianctchinese.llm.dto.AnnotationPayload;
 import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationEntity;
 import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationRelation;
@@ -57,13 +57,13 @@ public class AnalysisServiceImpl implements AnalysisService {
   private final RelationAnnotationRepository relationAnnotationRepository;
   private final TextSectionRepository textSectionRepository;
   private final TextSectionService textSectionService;
-  private final DeepSeekClient deepSeekClient;
+  private final HuggingFaceClient huggingFaceClient;
 
   @Override
   @Transactional
   public ClassificationResponse classifyText(Long textId) {
     TextDocument document = loadText(textId);
-    ClassificationPayload payload = deepSeekClient.classifyText(document.getContent());
+    ClassificationPayload payload = huggingFaceClient.classifyText(document.getContent());
     String normalizedCategory = normalizeCategory(payload.getCategory(), document.getCategory());
     document.setCategory(normalizedCategory);
     textDocumentRepository.save(document);
@@ -113,7 +113,7 @@ public class AnalysisServiceImpl implements AnalysisService {
   @Transactional
   public AutoAnnotationResponse autoAnnotate(Long textId) {
     TextDocument document = loadText(textId);
-    AnnotationPayload payload = deepSeekClient.annotateText(document.getContent());
+    AnnotationPayload payload = huggingFaceClient.annotateText(document.getContent());
     relationAnnotationRepository.deleteByTextDocumentId(textId);
     entityAnnotationRepository.deleteByTextDocumentId(textId);
 

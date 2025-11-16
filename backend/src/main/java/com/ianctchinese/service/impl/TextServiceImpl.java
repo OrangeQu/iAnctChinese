@@ -2,7 +2,11 @@ package com.ianctchinese.service.impl;
 
 import com.ianctchinese.dto.TextUploadRequest;
 import com.ianctchinese.model.TextDocument;
+import com.ianctchinese.repository.EntityAnnotationRepository;
+import com.ianctchinese.repository.ModelJobRepository;
+import com.ianctchinese.repository.RelationAnnotationRepository;
 import com.ianctchinese.repository.TextDocumentRepository;
+import com.ianctchinese.repository.TextSectionRepository;
 import com.ianctchinese.service.TextService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,6 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class TextServiceImpl implements TextService {
 
   private final TextDocumentRepository textDocumentRepository;
+  private final RelationAnnotationRepository relationAnnotationRepository;
+  private final EntityAnnotationRepository entityAnnotationRepository;
+  private final TextSectionRepository textSectionRepository;
+  private final ModelJobRepository modelJobRepository;
 
   @Override
   @Transactional
@@ -64,5 +72,17 @@ public class TextServiceImpl implements TextService {
       return List.of();
     }
     return textDocumentRepository.searchByKeyword(keyword.trim());
+  }
+
+  @Override
+  @Transactional
+  public void deleteText(Long id) {
+    // ensure the text exists before cascading delete
+    getText(id);
+    relationAnnotationRepository.deleteByTextDocumentId(id);
+    entityAnnotationRepository.deleteByTextDocumentId(id);
+    textSectionRepository.deleteByTextDocumentId(id);
+    modelJobRepository.deleteByTextId(id);
+    textDocumentRepository.deleteById(id);
   }
 }

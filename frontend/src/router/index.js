@@ -4,6 +4,7 @@ import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import DashboardView from "@/views/DashboardView.vue";
 import TextWorkspace from "@/views/TextWorkspace.vue";
+import DocumentManagementView from "@/views/DocumentManagementView.vue";
 import { useAuthStore } from "@/store/authStore";
 
 const routes = [
@@ -29,9 +30,15 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: "/documents",
+    name: "documents",
+    component: DocumentManagementView,
+    meta: { requiresAuth: true }
+  },
+  {
     path: "/texts/:id",
     name: "text-workspace",
-    component: TextWorkspace,
+    component: DashboardView,
     props: true,
     meta: { requiresAuth: true }
   }
@@ -44,15 +51,18 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
-  
+
   if (authStore.token && !authStore.user) {
     await authStore.loadUser();
   }
-  
+
+  const isAuthPage = to.name === "login" || to.name === "register";
+  const isLanding = to.name === "home";
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login');
-  } else if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
-    next('/dashboard');
+    next("/login");
+  } else if (authStore.isAuthenticated && (isAuthPage || isLanding)) {
+    next("/documents");
   } else {
     next();
   }
