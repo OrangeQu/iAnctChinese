@@ -1,0 +1,139 @@
+[1mdiff --git a/backend/pom.xml b/backend/pom.xml[m
+[1mindex cae0cfa..168d49c 100644[m
+[1m--- a/backend/pom.xml[m
+[1m+++ b/backend/pom.xml[m
+[36m@@ -100,6 +100,10 @@[m
+         <configuration>[m
+           <release>${java.version}</release>[m
+           <encoding>UTF-8</encoding>[m
+[32m+[m[32m          <parameters>true</parameters>[m
+[32m+[m[32m          <compilerArgs>[m
+[32m+[m[32m            <arg>-parameters</arg>[m
+[32m+[m[32m          </compilerArgs>[m
+         </configuration>[m
+       </plugin>[m
+     </plugins>[m
+[1mdiff --git a/backend/src/main/java/com/ianctchinese/config/SecurityConfig.java b/backend/src/main/java/com/ianctchinese/config/SecurityConfig.java[m
+[1mindex d55a8bd..3f6a67f 100644[m
+[1m--- a/backend/src/main/java/com/ianctchinese/config/SecurityConfig.java[m
+[1m+++ b/backend/src/main/java/com/ianctchinese/config/SecurityConfig.java[m
+[36m@@ -1,24 +1,39 @@[m
+ package com.ianctchinese.config;[m
+ [m
+[32m+[m[32mimport com.ianctchinese.security.CustomUserDetailsService;[m
+[32m+[m[32mimport com.ianctchinese.security.JwtAuthenticationFilter;[m
+[32m+[m[32mimport lombok.RequiredArgsConstructor;[m
+ import org.springframework.context.annotation.Bean;[m
+ import org.springframework.context.annotation.Configuration;[m
+ import org.springframework.security.authentication.AuthenticationManager;[m
+[32m+[m[32mimport org.springframework.security.authentication.AuthenticationProvider;[m
+[32m+[m[32mimport org.springframework.security.authentication.dao.DaoAuthenticationProvider;[m
+ import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;[m
+ import org.springframework.security.config.annotation.web.builders.HttpSecurity;[m
+[32m+[m[32mimport org.springframework.security.config.http.SessionCreationPolicy;[m
+ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;[m
+ import org.springframework.security.crypto.password.PasswordEncoder;[m
+ import org.springframework.security.web.SecurityFilterChain;[m
+[32m+[m[32mimport org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;[m
+ [m
+ @Configuration[m
+[32m+[m[32m@RequiredArgsConstructor[m
+ public class SecurityConfig {[m
+ [m
+[32m+[m[32m  private final JwtAuthenticationFilter jwtAuthenticationFilter;[m
+[32m+[m[32m  private final CustomUserDetailsService userDetailsService;[m
+[32m+[m
+   @Bean[m
+   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {[m
+     http[m
+         .csrf(csrf -> csrf.disable())[m
+[32m+[m[32m        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))[m
+         .authorizeHttpRequests(authorize -> authorize[m
+[31m-            .requestMatchers("/**").permitAll()[m
+[32m+[m[32m            .requestMatchers("/api/auth/**").permitAll()[m
+[32m+[m[32m            .anyRequest().authenticated()[m
+         )[m
+[32m+[m[32m        .authenticationProvider(authenticationProvider())[m
+[32m+[m[32m        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)[m
+         .httpBasic(httpBasic -> httpBasic.disable())[m
+         .formLogin(form -> form.disable());[m
+     return http.build();[m
+[36m@@ -33,4 +48,12 @@[m [mpublic class SecurityConfig {[m
+   public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {[m
+     return config.getAuthenticationManager();[m
+   }[m
+[32m+[m
+[32m+[m[32m  @Bean[m
+[32m+[m[32m  public AuthenticationProvider authenticationProvider() {[m
+[32m+[m[32m    DaoAuthenticationProvider provider = new DaoAuthenticationProvider();[m
+[32m+[m[32m    provider.setUserDetailsService(userDetailsService);[m
+[32m+[m[32m    provider.setPasswordEncoder(passwordEncoder());[m
+[32m+[m[32m    return provider;[m
+[32m+[m[32m  }[m
+ }[m
+[1mdiff --git a/backend/src/main/java/com/ianctchinese/controller/AuthController.java b/backend/src/main/java/com/ianctchinese/controller/AuthController.java[m
+[1mindex 15d7538..ffdb01c 100644[m
+[1m--- a/backend/src/main/java/com/ianctchinese/controller/AuthController.java[m
+[1m+++ b/backend/src/main/java/com/ianctchinese/controller/AuthController.java[m
+[36m@@ -7,6 +7,7 @@[m [mimport com.ianctchinese.dto.UserInfoResponse;[m
+ import com.ianctchinese.service.AuthService;[m
+ import jakarta.validation.Valid;[m
+ import lombok.RequiredArgsConstructor;[m
+[32m+[m[32mimport org.springframework.http.HttpStatus;[m
+ import org.springframework.http.ResponseEntity;[m
+ import org.springframework.security.core.Authentication;[m
+ import org.springframework.security.core.context.SecurityContextHolder;[m
+[36m@@ -48,6 +49,10 @@[m [mpublic class AuthController {[m
+   @GetMapping("/current")[m
+   public ResponseEntity<UserInfoResponse> getCurrentUser() {[m
+     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();[m
+[32m+[m[32m    if (authentication == null || !authentication.isAuthenticated()[m
+[32m+[m[32m        || "anonymousUser".equals(authentication.getPrincipal())) {[m
+[32m+[m[32m      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();[m
+[32m+[m[32m    }[m
+     String username = authentication.getName();[m
+     UserInfoResponse response = authService.getCurrentUser(username);[m
+     return ResponseEntity.ok(response);[m
+[1mdiff --git a/backend/src/main/java/com/ianctchinese/controller/TextAnalysisController.java b/backend/src/main/java/com/ianctchinese/controller/TextAnalysisController.java[m
+[1mindex b6c2241..2349b94 100644[m
+[1m--- a/backend/src/main/java/com/ianctchinese/controller/TextAnalysisController.java[m
+[1m+++ b/backend/src/main/java/com/ianctchinese/controller/TextAnalysisController.java[m
+[36m@@ -31,8 +31,10 @@[m [mpublic class TextAnalysisController {[m
+   }[m
+ [m
+   @PostMapping("/{textId}/full")[m
+[31m-  public ResponseEntity<ModelAnalysisResponse> fullAnalysis(@PathVariable("textId") Long textId) {[m
+[31m-    return ResponseEntity.ok(analysisService.runFullAnalysis(textId));[m
+[32m+[m[32m  public ResponseEntity<ModelAnalysisResponse> fullAnalysis(@PathVariable("textId") Long textId,[m
+[32m+[m[32m      @org.springframework.web.bind.annotation.RequestParam(value = "model", required = false)[m
+[32m+[m[32m      String provider) {[m
+[32m+[m[32m    return ResponseEntity.ok(analysisService.runFullAnalysis(textId, provider));[m
+   }[m
+ [m
+   @GetMapping("/{textId}/insights")[m
+[1mdiff --git a/backend/src/main/java/com/ianctchinese/controller/TextController.java b/backend/src/main/java/com/ianctchinese/controller/TextController.java[m
+[1mindex ec6fe84..2b6af61 100644[m
+[1m--- a/backend/src/main/java/com/ianctchinese/controller/TextController.java[m
+[1m+++ b/backend/src/main/java/com/ianctchinese/controller/TextController.java[m
+[36m@@ -4,6 +4,7 @@[m [mimport com.fasterxml.jackson.core.JsonProcessingException;[m
+ import com.fasterxml.jackson.databind.ObjectMapper;[m
+ import com.ianctchinese.dto.TextCategoryUpdateRequest;[m
+ import com.ianctchinese.dto.TextUploadRequest;[m
+[32m+[m[32mimport com.ianctchinese.dto.TextUpdateRequest;[m
+ import com.ianctchinese.model.TextDocument;[m
+ import com.ianctchinese.service.ExportService;[m
+ import com.ianctchinese.service.TextService;[m
+[36m@@ -59,6 +60,12 @@[m [mpublic class TextController {[m
+     return ResponseEntity.ok(textService.updateCategory(id, request.getCategory()));[m
+   }[m
+ [m
+[32m+[m[32m  @PatchMapping("/{id}")[m
+[32m+[m[32m  public ResponseEntity<TextDocument> updateText(@PathVariable Long id,[m
+[32m+[m[32m      @Valid @RequestBody TextUpdateRequest request) {[m
+[32m+[m[32m    return ResponseEntity.ok(textService.updateText(id, request));[m
+[32m+[m[32m  }[m
+[32m+[m
+   @GetMapping("/{id}/export")[m
+   public ResponseEntity<byte[]> exportText(@PathVariable Long id) throws JsonProcessingException {[m
+     var bundle = exportService.buildExport(id);[m
+[1mdiff --git a/backend/src/main/java/com/ianctchinese/dto/TextUpdateRequest.java b/b
