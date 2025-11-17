@@ -111,31 +111,37 @@
         <div class="section-actions">
           <el-button size="small" @click="handleAutoSegment">自动推荐句读</el-button>
         </div>
-        <el-table :data="sections" border size="small" height="260">
-          <el-table-column prop="originalText" label="原文" min-width="240" />
-          <el-table-column prop="punctuatedText" label="句读" min-width="240">
-            <template #default="{ row }">
+        <div class="segments" v-if="sections.length">
+          <div v-for="section in sections" :key="section.id" class="segment-card">
+            <div class="segment-col">
+              <div class="segment-label">原文</div>
+              <div class="segment-text original">{{ section.originalText || "（空）" }}</div>
+            </div>
+            <div class="segment-col">
+              <div class="segment-label">句读</div>
               <el-input
                 type="textarea"
-                v-model="row.punctuatedText"
+                v-model="section.punctuatedText"
                 :rows="3"
+                :autosize="{ minRows: 3, maxRows: 6 }"
                 placeholder="添加句读"
-                @change="handleUpdateSection(row)"
+                @blur="handleUpdateSection(section)"
               />
-            </template>
-          </el-table-column>
-          <el-table-column prop="summary" label="摘要" min-width="200">
-            <template #default="{ row }">
+            </div>
+            <div class="segment-col">
+              <div class="segment-label">摘要</div>
               <el-input
                 type="textarea"
-                v-model="row.summary"
+                v-model="section.summary"
                 :rows="3"
+                :autosize="{ minRows: 3, maxRows: 6 }"
                 placeholder="一句话摘要"
-                @change="handleUpdateSection(row)"
+                @blur="handleUpdateSection(section)"
               />
-            </template>
-          </el-table-column>
-        </el-table>
+            </div>
+          </div>
+        </div>
+        <p v-else class="placeholder">暂无句读分段，请先自动推荐或手动新增。</p>
       </section>
     </div>
   </div>
@@ -298,5 +304,45 @@ const translateCategory = (category) => {
   margin-bottom: 12px;
   display: flex;
   justify-content: flex-end;
+}
+
+.segments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.segment-card {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.segment-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.segment-label {
+  font-weight: 600;
+  color: #8c7a6b;
+  font-size: 13px;
+}
+
+.segment-text {
+  background: #f9f7f2;
+  border: 1px solid #f1ede4;
+  border-radius: 10px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  color: #4a443e;
+  min-height: 88px;
+  white-space: pre-wrap;
 }
 </style>
