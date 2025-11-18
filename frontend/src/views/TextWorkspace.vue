@@ -9,13 +9,47 @@
         <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文本</p>
         <el-divider />
         <div class="action-row">
-          <el-select v-model="selectedModel" size="small" style="width: 180px" placeholder="选择大模型">
-            <el-option label="HuggingFace (Qwen-0.6B)" value="huggingface" />
-            <el-option label="DeepSeek" value="deepseek" />
+          <el-select v-model="selectedModel" size="small" style="width: 280px" placeholder="选择大模型" filterable>
+            <el-option-group label="深度思考模型（响应较慢）">
+              <el-option
+                v-for="model in thinkingModels"
+                :key="model.modelKey"
+                :label="model.displayName"
+                :value="model.modelKey"
+              >
+                <span style="float: left">{{ model.displayName }}</span>
+                <span style="float: right; color: #f56c6c; font-size: 12px">耗时较长</span>
+              </el-option>
+            </el-option-group>
+            <el-option-group label="常规模型">
+              <el-option
+                v-for="model in regularModels"
+                :key="model.modelKey"
+                :label="model.displayName"
+                :value="model.modelKey"
+              >
+                <span style="float: left">{{ model.displayName }}</span>
+                <span style="float: right; color: #8492a6; font-size: 12px">{{ model.provider }}</span>
+              </el-option>
+            </el-option-group>
           </el-select>
-          <el-button type="primary" @click="handleFullAnalysis">触发模型分析</el-button>
+          <el-button type="primary" @click="handleFullAnalysis" :loading="analyzing">
+            {{ analyzing ? '分析中...' : '触发模型分析' }}
+          </el-button>
           <el-button type="warning" plain @click="handleClassify">大模型判断类型</el-button>
         </div>
+        <el-alert 
+          v-if="isThinkingModel"
+          title="您选择的是深度思考模型"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-top: 12px"
+        >
+          <template #default>
+            <p style="margin: 0">深度思考模型会进行复杂推理，响应时间较长（30秒-2分钟），请耐心等待。</p>
+          </template>
+        </el-alert>
         <div v-if="store.classification?.suggestedCategory" class="classification-tip">
           <el-alert title="模型分析建议" type="info" :closable="false" show-icon>
             <template #default>
@@ -148,13 +182,16 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed } from "vue";
+import { reactive, ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
+import { modelsApi } from "@/api/models";
 
 const store = useTextStore();
 
-const selectedModel = ref("huggingface");
+const selectedModel = ref("deepseek-ai/DeepSeek-V3.2-Exp");
+const availableModels = ref([]);
+const analyzing = ref(false);
 
 const entityForm = reactive({
   label: "",
@@ -172,6 +209,18 @@ const relationForm = reactive({
 const sections = computed(() => store.sections || []);
 const entities = computed(() => store.entities || []);
 const relations = computed(() => store.relations || []);
+
+// 区分思考类模型和常规模型
+const thinkingModels = computed(() => 
+  availableModels.value.filter(m => m.displayName.includes("🧠") || m.displayName.includes("深度思考"))
+);
+const regularModels = computed(() => 
+  availableModels.value.filter(m => !m.displayName.includes("🧠") && !m.displayName.includes("深度思考"))
+);
+const isThinkingModel = computed(() => {
+  const model = availableModels.value.find(m => m.modelKey === selectedModel.value);
+  return model && (model.displayName.includes("🧠") || model.displayName.includes("深度思考"));
+});
 
 const submitEntity = async () => {
   if (!entityForm.label) {
@@ -220,11 +269,26 @@ const handleUpdateSection = async (section) => {
 };
 
 const handleFullAnalysis = async () => {
+  if (!selectedModel.value) {
+    ElMessage.warning("请先选择一个模型");
+    return;
+  }
+  
   try {
+    analyzing.value = true;
+    if (isThinkingModel.value) {
+      ElMessage.info({
+        message: "深度思考模型启动中，预计需要 30秒-2分钟，请耐心等待...",
+        duration: 5000
+      });
+    }
     await store.runFullAnalysis(selectedModel.value);
     ElMessage.success("模型分析完成，已更新标注与句读");
   } catch (error) {
-    ElMessage.error("模型分析失败，请稍后重试");
+    console.error("分析错误:", error);
+    ElMessage.error("模型分析失败，请检查网络或稍后重试");
+  } finally {
+    analyzing.value = false;
   }
 };
 
@@ -247,6 +311,23 @@ const translateCategory = (category) => {
   };
   return map[category] || category || "未知";
 };
+
+const loadAvailableModels = async () => {
+  try {
+    const response = await modelsApi.getAllEnabledModels();
+    availableModels.value = response.data || [];
+    if (availableModels.value.length > 0 && !selectedModel.value) {
+      selectedModel.value = availableModels.value[0].modelKey;
+    }
+  } catch (error) {
+    console.error("加载模型列表失败:", error);
+    ElMessage.warning("无法加载模型列表，请检查网络连接");
+  }
+};
+
+onMounted(() => {
+  loadAvailableModels();
+});
 </script>
 
 <style scoped>

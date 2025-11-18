@@ -2,7 +2,7 @@
   <div class="shell">
     <header class="global-bar">
       <div class="title">
-        <span>iAnctChinese · 古籍智能标注平台</span>
+        <span>古籍视界 · 智能古籍标注与知识图谱平台</span>
         <small>项目 | 类型 | 时间 | 范围 | 搜索 | 导出</small>
       </div>
       <div class="actions">

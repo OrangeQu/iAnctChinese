@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/ianct_chinese?useSSL=false&useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: root
-    password: QTSqts1030+
+    password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -32,11 +32,8 @@ logging:
     com.ianctchinese: DEBUG
     org.springframework.web: INFO
 
-# backend/src/main/resources/application.yml
-huggingface:
-  api-token: ${HUGGINGFACE_API_TOKEN:}
-  model: qwen/Qwen3-0.6B
-deepseek:
-  api-key: ${DEEPSEEK_API_KEY:}
+# 硅基流动 SiliconFlow API 配置
+siliconflow:
+  api-key: 
 
 
