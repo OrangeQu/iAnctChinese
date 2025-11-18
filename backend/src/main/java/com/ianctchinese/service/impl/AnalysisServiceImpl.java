@@ -11,8 +11,7 @@ import com.ianctchinese.dto.TextInsightsResponse.MapPathPoint;
 import com.ianctchinese.dto.TextInsightsResponse.Stats;
 import com.ianctchinese.dto.TextInsightsResponse.TimelineEvent;
 import com.ianctchinese.dto.TextInsightsResponse.WordCloudItem;
-import com.ianctchinese.llm.DeepSeekClient;
-import com.ianctchinese.llm.HuggingFaceClient;
+import com.ianctchinese.llm.UnifiedLLMClient;
 import com.ianctchinese.llm.dto.AnnotationPayload;
 import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationEntity;
 import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationRelation;
@@ -64,14 +63,14 @@ public class AnalysisServiceImpl implements AnalysisService {
   private final RelationAnnotationRepository relationAnnotationRepository;
   private final TextSectionRepository textSectionRepository;
   private final TextSectionService textSectionService;
-  private final HuggingFaceClient huggingFaceClient;
-  private final DeepSeekClient deepSeekClient;
+  private final UnifiedLLMClient unifiedLLMClient;
 
   @Override
   @Transactional
   public ClassificationResponse classifyText(Long textId) {
     TextDocument document = loadText(textId);
-    ClassificationPayload payload = classifyWithFallback(document.getContent(), false);
+    // 默认使用 DeepSeek-V3.2-Exp 作为基础模型
+    ClassificationPayload payload = classifyWithFallback(document.getContent(), "deepseek-ai/DeepSeek-V3.2-Exp");
     String normalizedCategory = normalizeCategory(payload.getCategory(), document.getCategory());
     document.setCategory(normalizedCategory);
     textDocumentRepository.save(document);
@@ -121,7 +120,8 @@ public class AnalysisServiceImpl implements AnalysisService {
   @Transactional
   public AutoAnnotationResponse autoAnnotate(Long textId) {
     TextDocument document = loadText(textId);
-    AnnotationPayload payload = huggingFaceClient.annotateText(document.getContent());
+    // 默认使用 DeepSeek-V3.2-Exp 作为基础模型
+    AnnotationPayload payload = unifiedLLMClient.annotateText(document.getContent(), "deepseek-ai/DeepSeek-V3.2-Exp");
     relationAnnotationRepository.deleteByTextDocumentId(textId);
     entityAnnotationRepository.deleteByTextDocumentId(textId);
 
@@ -160,18 +160,20 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   @Override
   @Transactional
-  public ModelAnalysisResponse runFullAnalysis(Long textId, String provider) {
-    boolean useDeepSeek = provider != null && provider.equalsIgnoreCase("deepseek");
+  public ModelAnalysisResponse runFullAnalysis(Long textId, String modelKey) {
+    String effectiveModelKey = (modelKey != null && !modelKey.isBlank())
+        ? modelKey
+        : "deepseek-ai/DeepSeek-V3.2-Exp";
 
     TextDocument document = loadText(textId);
-    ClassificationPayload clsPayload = classifyWithFallback(document.getContent(), useDeepSeek);
+    
+    // 原始逻辑：先用大模型分类，再用大模型进行标注
+    ClassificationPayload clsPayload = classifyWithFallback(document.getContent(), effectiveModelKey);
     String normalizedCategory = normalizeCategory(clsPayload.getCategory(), document.getCategory());
     document.setCategory(normalizedCategory);
     textDocumentRepository.save(document);
 
-    AnnotationPayload annPayload = useDeepSeek
-        ? deepSeekClient.annotateText(document.getContent())
-        : huggingFaceClient.annotateText(document.getContent());
+    AnnotationPayload annPayload = unifiedLLMClient.annotateText(document.getContent(), effectiveModelKey);
     relationAnnotationRepository.deleteByTextDocumentId(textId);
     entityAnnotationRepository.deleteByTextDocumentId(textId);
 
@@ -318,14 +320,12 @@ public class AnalysisServiceImpl implements AnalysisService {
   }
 
   /**
-   * 调用大模型分类；如返回为空或“unknown”，使用关键词启发式兜底，至少给出一个可用类别。
+   * 调用大模型分类；如返回为空或"unknown"，使用关键词启发式兜底，至少给出一个可用类别。
    */
-  private ClassificationPayload classifyWithFallback(String content, boolean useDeepSeek) {
+  private ClassificationPayload classifyWithFallback(String content, String modelKey) {
     ClassificationPayload payload = null;
     try {
-      payload = useDeepSeek
-          ? deepSeekClient.classifyText(content)
-          : huggingFaceClient.classifyText(content);
+      payload = unifiedLLMClient.classifyText(content, modelKey);
     } catch (Exception ex) {
       // ignore, fallback below
     }
