@@ -128,6 +128,29 @@
         </div>
       </section>
 
+      <section class="panel visualization-panel">
+        <div class="panel-head">
+          <h3 class="section-title">可视化视图</h3>
+          <el-radio-group v-model="activeView" size="small">
+            <el-radio-button label="graph">知识图谱</el-radio-button>
+            <el-radio-button label="map">地图轨迹</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="view-container">
+          <GraphView
+            v-if="activeView === 'graph'"
+            :entities="entities"
+            :relations="relations"
+            style="height: 400px; width: 100%"
+          />
+          <MapView
+            v-if="activeView === 'map'"
+            :points="mapPoints"
+            style="height: 400px; width: 100%"
+          />
+        </div>
+      </section>
+
       <section class="panel sentence-panel">
         <h3 class="section-title">句读/分段</h3>
         <div class="section-actions">
@@ -174,9 +197,14 @@ import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
 import { QuillEditor } from "@vueup/vue-quill";
 import "@vueup/vue-quill/dist/vue-quill.snow.css";
+import GraphView from "@/components/visualizations/GraphView.vue";
+import MapView from "@/components/visualizations/MapView.vue";
 
 const router = useRouter();
 const store = useTextStore();
+
+const activeView = ref("graph");
+const mapPoints = computed(() => store.insights?.mapPoints || []);
 
 const llmModels = [
   { id: "deepseek-ai/DeepSeek-V3.2-Exp", label: "deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
@@ -391,6 +419,10 @@ const translateCategory = (category) => {
 }
 
 .sentence-panel {
+  grid-column: 1 / -1;
+}
+
+.visualization-panel {
   grid-column: 1 / -1;
 }
 
