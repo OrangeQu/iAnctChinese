@@ -1,32 +1,29 @@
 <template>
-  <div>
-    <el-button type="primary" @click="drawerVisible = true" size="large">上传文言文</el-button>
-    <el-drawer v-model="drawerVisible" title="上传古籍文本" size="40%">
-      <el-form :model="form" label-width="96px" :disabled="saving">
-        <el-form-item label="标题">
-          <el-input v-model="form.title" placeholder="如《赤壁赋》" />
-        </el-form-item>
-        <el-form-item label="作者">
-          <el-input v-model="form.author" placeholder="作者/编者" />
-        </el-form-item>
-        <el-form-item label="时代">
-          <el-input v-model="form.era" placeholder="如 宋" />
-        </el-form-item>
-        <el-form-item label="正文">
-          <el-input
-            v-model="form.content"
-            type="textarea"
-            :rows="10"
-            placeholder="粘贴完整文言文内容..."
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="saving" @click="handleSubmit">上传并分析</el-button>
-          <el-button @click="drawerVisible = false">取消</el-button>
-        </el-form-item>
-      </el-form>
-    </el-drawer>
-  </div>
+  <el-drawer v-model="drawerVisible" title="上传古籍文本" size="40%" destroy-on-close>
+    <el-form :model="form" label-width="96px" :disabled="saving">
+      <el-form-item label="标题">
+        <el-input v-model="form.title" placeholder="如《赤壁赋》" />
+      </el-form-item>
+      <el-form-item label="作者">
+        <el-input v-model="form.author" placeholder="作者/编者" />
+      </el-form-item>
+      <el-form-item label="时代">
+        <el-input v-model="form.era" placeholder="如 宋" />
+      </el-form-item>
+      <el-form-item label="正文">
+        <el-input
+          v-model="form.content"
+          type="textarea"
+          :rows="10"
+          placeholder="粘贴完整文言文内容..."
+        />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" :loading="saving" @click="handleSubmit">上传并分析</el-button>
+        <el-button @click="drawerVisible = false">取消</el-button>
+      </el-form-item>
+    </el-form>
+  </el-drawer>
 </template>
 
 <script setup>
@@ -43,6 +40,10 @@ const form = reactive({
   era: "",
   content: ""
 });
+
+const open = () => {
+  drawerVisible.value = true;
+};
 
 const resetForm = () => {
   form.title = "";
@@ -66,4 +67,6 @@ const handleSubmit = async () => {
     saving.value = false;
   }
 };
+
+defineExpose({ open });
 </script>

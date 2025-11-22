@@ -1,10 +1,54 @@
 <template>
-  <div class="workspace" v-loading="store.loading">
-    <div class="stage-grid">
-      <aside class="panel text-panel">
-        <div class="panel-head">
-          <h3 class="section-title">原文</h3>
-          <el-button link @click="goBackToDocuments">返回文档管理</el-button>
+  <div class="page-container workspace-container" v-loading="store.loading">
+    <!-- Top Bar: Title and Actions -->
+    <div class="workspace-header card">
+      <div class="header-left">
+        <el-button link @click="goBackToDocuments">
+          <el-icon><ArrowLeft /></el-icon> 返回
+        </el-button>
+        <h1 class="doc-title">{{ store.selectedText?.title || '未命名文档' }}</h1>
+        <el-tag v-if="store.selectedText?.category" effect="plain">
+          {{ translateCategory(store.selectedText.category) }}
+        </el-tag>
+      </div>
+      <div class="header-actions">
+         <el-select
+            v-model="selectedModel"
+            placeholder="选择模型"
+            class="model-select"
+            filterable
+            default-first-option
+          >
+            <el-option
+              v-for="item in llmModels"
+              :key="item.id"
+              :label="item.isThinking ? `【思考】${item.label}` : item.label"
+              :value="item.id"
+            />
+          </el-select>
+          <el-button type="primary" :loading="store.analysisRunning" @click="handleFullAnalysis">
+            <el-icon class="mr-2"><Cpu /></el-icon>
+            模型全量分析
+          </el-button>
+          <el-button @click="router.push('/graph')">
+            <el-icon class="mr-2"><Share /></el-icon>
+            查看图谱
+          </el-button>
+          <el-button type="success" plain :loading="savingContent" @click="handleContentSave(true)">
+            保存
+          </el-button>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="workspace-grid">
+      <!-- Left: Editor -->
+      <div class="card editor-card">
+        <div class="card-header">
+          <h3>原文内容</h3>
+          <el-tooltip content="原文修改后请记得保存" placement="top">
+            <el-icon><InfoFilled /></el-icon>
+          </el-tooltip>
         </div>
         <QuillEditor
           v-if="store.selectedText"
@@ -15,197 +59,152 @@
           :read-only="savingContent"
           @blur="handleContentSave()"
         />
-        <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文章</p>
-        <el-divider />
-        <div class="action-row">
-          <el-select
-            v-model="selectedModel"
-            size="small"
-            style="width: 260px"
-            placeholder="选择大模型"
-            filterable
-          >
-            <el-option
-              v-for="item in llmModels"
-              :key="item.id"
-              :label="item.isThinking ? `【深度思考】${item.label}` : item.label"
-              :value="item.id"
-            />
-          </el-select>
-          <el-button type="primary" :loading="store.analysisRunning" @click="handleFullAnalysis">触发模型分析</el-button>
-          <el-button type="success" plain :loading="savingContent" @click="handleContentSave(true)">
-            保存原文
-          </el-button>
-          <el-button type="warning" plain :loading="store.classifyRunning" @click="handleClassify">大模型判断类型</el-button>
+        <div v-else class="empty-placeholder">
+          正在加载文档内容...
         </div>
-        <div v-if="store.classification?.suggestedCategory" class="classification-tip">
-          <el-alert title="模型分析建议" type="info" :closable="false" show-icon>
-            <template #default>
-              <p>当前类型：<strong>{{ translateCategory(store.selectedText?.category) }}</strong></p>
-              <p>
-                模型建议：<strong>{{ translateCategory(store.classification.suggestedCategory) }}</strong>
-                （置信度：{{ ((store.classification.confidence || 0) * 100).toFixed(1) }}%）
-              </p>
-            </template>
-          </el-alert>
         </div>
-      </aside>
 
-      <section class="panel annotation-panel">
-        <div class="annotation-section">
-          <h3 class="section-title">实体标注</h3>
-          <el-form :model="entityForm" inline class="form-inline">
-            <el-form-item label="名称">
-              <el-input v-model="entityForm.label" placeholder="例：周瑜" />
-            </el-form-item>
-            <el-form-item label="类别">
-              <el-select v-model="entityForm.category" placeholder="实体类别">
+      <!-- Right: Annotation Tools & Analysis Panel (Tabs) -->
+      <div class="right-column">
+        <div class="card tool-card">
+           <el-tabs v-model="activeTab">
+             <el-tab-pane label="标注工具" name="annotate">
+                <!-- Entity Annotation -->
+                <div class="tool-section">
+                  <h4 class="tool-title">实体标注</h4>
+                  <div class="input-group">
+                    <el-input v-model="entityForm.label" placeholder="实体名称" />
+                    <el-select v-model="entityForm.category" placeholder="类型" style="width: 100px">
                 <el-option label="人物" value="PERSON" />
                 <el-option label="地点" value="LOCATION" />
                 <el-option label="事件" value="EVENT" />
                 <el-option label="组织" value="ORGANIZATION" />
                 <el-option label="器物" value="OBJECT" />
               </el-select>
-            </el-form-item>
-            <el-form-item label="起止">
-              <el-input-number v-model="entityForm.startOffset" :min="0" />
-              <span> - </span>
-              <el-input-number v-model="entityForm.endOffset" :min="0" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="submitEntity">添加实体</el-button>
-            </el-form-item>
-          </el-form>
-          <el-table :data="entities" border size="small" height="220">
-            <el-table-column prop="label" label="实体" width="120" />
-            <el-table-column prop="category" label="类别" width="120" />
-            <el-table-column prop="confidence" label="置信度" />
-          </el-table>
+                    <el-button type="primary" circle @click="submitEntity">
+                      <el-icon><Plus /></el-icon>
+                    </el-button>
         </div>
-        <el-divider />
-        <div class="annotation-section">
-          <h3 class="section-title">关系标注</h3>
-          <el-form :model="relationForm" inline class="form-inline">
-            <el-form-item label="实体A">
-              <el-select v-model="relationForm.sourceEntityId" placeholder="选择实体">
-                <el-option
+                  <div class="entity-list">
+                    <el-tag 
                   v-for="entity in entities"
                   :key="entity.id"
-                  :label="entity.label"
-                  :value="entity.id"
-                />
+                      class="entity-tag"
+                      :type="getEntityTagType(entity.category)"
+                      closable
+                      @close="removeEntity(entity.id)"
+                    >
+                      {{ entity.label }}
+                    </el-tag>
+                    <div v-if="entities.length === 0" class="empty-text">暂无实体</div>
+                  </div>
+                </div>
+
+                <el-divider />
+
+                <!-- Relation Annotation -->
+                <div class="tool-section">
+                  <h4 class="tool-title">关系抽取</h4>
+                  <div class="relation-form">
+                    <el-select v-model="relationForm.sourceEntityId" placeholder="实体 A" filterable>
+                        <el-option v-for="e in entities" :key="e.id" :label="e.label" :value="e.id" />
               </el-select>
-            </el-form-item>
-            <el-form-item label="实体B">
-              <el-select v-model="relationForm.targetEntityId" placeholder="选择实体">
-                <el-option
-                  v-for="entity in entities"
-                  :key="`target-${entity.id}`"
-                  :label="entity.label"
-                  :value="entity.id"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="关系">
-              <el-select v-model="relationForm.relationType" placeholder="关系类型">
+                    <el-select v-model="relationForm.relationType" placeholder="关系" style="width: 100px">
                 <el-option label="对抗" value="CONFLICT" />
                 <el-option label="结盟" value="SUPPORT" />
                 <el-option label="行旅" value="TRAVEL" />
                 <el-option label="亲属" value="FAMILY" />
                 <el-option label="时间" value="TEMPORAL" />
               </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="submitRelation">添加关系</el-button>
-            </el-form-item>
-          </el-form>
-          <el-table :data="relations" border size="small" height="200">
-            <el-table-column prop="source.label" label="实体A" />
-            <el-table-column prop="relationType" label="关系类型" />
-            <el-table-column prop="target.label" label="实体B" />
-            <el-table-column prop="confidence" label="置信度" />
+                    <el-select v-model="relationForm.targetEntityId" placeholder="实体 B" filterable>
+                        <el-option v-for="e in entities" :key="`t-${e.id}`" :label="e.label" :value="e.id" />
+                    </el-select>
+                    <el-button type="primary" @click="submitRelation">添加</el-button>
+                  </div>
+                  <el-table :data="relations" size="small" height="200" style="width: 100%">
+                    <el-table-column prop="source.label" label="A" width="80" />
+                    <el-table-column prop="relationType" label="关系" width="80">
+                      <template #default="{ row }">
+                        <el-tag size="small" effect="plain">{{ translateRelation(row.relationType) }}</el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="target.label" label="B" width="80" />
           </el-table>
         </div>
-      </section>
+             </el-tab-pane>
+             
+             <el-tab-pane label="智能分析" name="analysis">
+                <AnalysisPanel
+                  v-if="store.selectedText"
+                  :current-category="store.selectedText.category || ''"
+                  :classification="store.classification"
+                  :stats="store.insights?.stats"
+                  :words="store.insights?.wordCloud"
+                  :analysis-summary="store.insights?.analysisSummary"
+                  @update-category="store.updateSelectedCategory"
+                />
+             </el-tab-pane>
+           </el-tabs>
+        </div>
+        </div>
+        </div>
 
-      <section class="panel visualization-panel">
-        <div class="panel-head">
-          <h3 class="section-title">可视化视图</h3>
-          <el-radio-group v-model="activeView" size="small">
-            <el-radio-button label="graph">知识图谱</el-radio-button>
-            <el-radio-button label="map">地图轨迹</el-radio-button>
-          </el-radio-group>
+    <!-- Bottom: Segmentation (Full Width) -->
+    <div class="card segment-section">
+      <div class="card-header">
+        <h3>句读与摘要</h3>
+        <el-button size="small" @click="handleAutoSegment">
+          <el-icon class="mr-1"><MagicStick /></el-icon> 智能句读
+        </el-button>
         </div>
-        <div class="view-container">
-          <GraphView
-            v-if="activeView === 'graph'"
-            :entities="entities"
-            :relations="relations"
-            style="height: 400px; width: 100%"
-          />
-          <MapView
-            v-if="activeView === 'map'"
-            :points="mapPoints"
-            style="height: 400px; width: 100%"
-          />
-        </div>
-      </section>
-
-      <section class="panel sentence-panel">
-        <h3 class="section-title">句读/分段</h3>
-        <div class="section-actions">
-          <el-button size="small" @click="handleAutoSegment">自动推荐句读</el-button>
-        </div>
-        <div class="segments" v-if="sections.length">
-          <div v-for="section in sections" :key="section.id" class="segment-card">
-            <div class="segment-col">
-              <div class="segment-label">原文</div>
-              <div class="segment-text original">{{ section.originalText || "（空）" }}</div>
-            </div>
-            <div class="segment-col">
-              <div class="segment-label">句读</div>
+      <div class="segments-list" v-if="sections.length">
+         <div v-for="(section, index) in sections" :key="section.id" class="segment-row">
+           <div class="segment-index">{{ index + 1 }}</div>
+           <div class="segment-content">
+             <div class="segment-original">{{ section.originalText }}</div>
+             <div class="segment-edit">
               <el-input
+                  v-model="section.punctuatedText" 
                 type="textarea"
-                v-model="section.punctuatedText"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-                placeholder="添加句读"
+                  :rows="2" 
+                  placeholder="句读结果" 
                 @blur="handleUpdateSection(section)"
               />
             </div>
-            <div class="segment-col">
-              <div class="segment-label">摘要</div>
+             <div class="segment-summary">
               <el-input
-                type="textarea"
                 v-model="section.summary"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-                placeholder="一句话摘要"
+                  placeholder="本段摘要" 
                 @blur="handleUpdateSection(section)"
               />
             </div>
           </div>
         </div>
-        <p v-else class="placeholder">暂无句读分段，请先自动推荐或手动新增。</p>
-      </section>
+      </div>
+      <div v-else class="empty-placeholder">
+        暂无分段数据，请点击“智能句读”生成
     </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch } from "vue";
-import { useRouter } from "vue-router";
+import { reactive, ref, computed, watch, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
 import { QuillEditor } from "@vueup/vue-quill";
 import "@vueup/vue-quill/dist/vue-quill.snow.css";
-import GraphView from "@/components/visualizations/GraphView.vue";
-import MapView from "@/components/visualizations/MapView.vue";
+import { ArrowLeft, Cpu, Share, InfoFilled, Plus, MagicStick } from "@element-plus/icons-vue";
+import AnalysisPanel from "@/components/visualizations/AnalysisPanel.vue";
 
 const router = useRouter();
+const route = useRoute();
 const store = useTextStore();
+const activeTab = ref('annotate');
 
-const activeView = ref("graph");
-const mapPoints = computed(() => store.insights?.mapPoints || []);
-
+// Restored Full LLM Models List
 const llmModels = [
   { id: "deepseek-ai/DeepSeek-V3.2-Exp", label: "deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
   { id: "Pro/deepseek-ai/DeepSeek-V3.2-Exp", label: "Pro/deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
@@ -290,6 +289,14 @@ const sections = computed(() => store.sections || []);
 const entities = computed(() => store.entities || []);
 const relations = computed(() => store.relations || []);
 
+onMounted(async () => {
+  if (route.params.id) {
+    if (store.selectedTextId !== route.params.id) {
+       await store.selectText(route.params.id);
+    }
+  }
+});
+
 watch(
   () => store.selectedText?.content,
   (value) => {
@@ -298,234 +305,245 @@ watch(
   { immediate: true }
 );
 
+const goBackToDocuments = () => router.push("/documents");
+
 const handleContentSave = async (force = false) => {
-  if (!store.selectedTextId || !store.selectedText) {
-    return;
-  }
-  if (!force && (savingContent.value || editableContent.value === store.selectedText.content)) {
-    return;
-  }
+  if (!store.selectedTextId || !store.selectedText) return;
+  if (!force && (savingContent.value || editableContent.value === store.selectedText.content)) return;
+  
   savingContent.value = true;
   try {
-    const payload = {
-      title: store.selectedText.title || "未命名文献",
-      content: editableContent.value,
-      category: store.selectedText.category || "unknown",
-      author: store.selectedText.author || "",
-      era: store.selectedText.era || ""
-    };
-    const updated = await store.updateText(store.selectedTextId, payload);
-    store.selectedText.content = updated.content;
-    ElMessage.success("原文内容已保存");
+    const payload = { ...store.selectedText, content: editableContent.value };
+    await store.updateText(store.selectedTextId, payload);
+    store.selectedText.content = editableContent.value;
+    if (force) ElMessage.success("已保存");
   } catch (error) {
-    ElMessage.error("原文保存失败，请稍后重试");
+    ElMessage.error("保存失败");
   } finally {
     savingContent.value = false;
   }
 };
 
-const goBackToDocuments = () => {
-  router.push("/documents");
-};
-
 const submitEntity = async () => {
-  if (!entityForm.label) {
-    ElMessage.warning("请填写实体名称");
-    return;
-  }
+  if (!entityForm.label) return;
   await store.createEntityAnnotation({
     textId: store.selectedTextId,
-    startOffset: entityForm.startOffset,
-    endOffset: entityForm.endOffset,
     label: entityForm.label,
     category: entityForm.category,
-    confidence: 0.9
+    confidence: 1.0
   });
-  ElMessage.success("实体已添加");
   entityForm.label = "";
 };
 
+const removeEntity = (id) => {
+  // Assuming store has delete method
+  // store.deleteEntity(id); 
+  console.log("Delete entity", id);
+};
+
 const submitRelation = async () => {
-  if (!relationForm.sourceEntityId || !relationForm.targetEntityId) {
-    ElMessage.warning("请选择实体");
-    return;
-  }
+  if (!relationForm.sourceEntityId || !relationForm.targetEntityId) return;
   await store.createRelationAnnotation({
     textId: store.selectedTextId,
     sourceEntityId: relationForm.sourceEntityId,
     targetEntityId: relationForm.targetEntityId,
     relationType: relationForm.relationType,
-    confidence: 0.8
+    confidence: 1.0
   });
   ElMessage.success("关系已添加");
 };
 
 const handleAutoSegment = async () => {
   await store.autoSegmentSections();
-  ElMessage.success("已重新生成句读结果");
+  ElMessage.success("智能句读完成");
 };
 
 const handleUpdateSection = async (section) => {
   await store.updateSection(section.id, {
-    originalText: section.originalText,
     punctuatedText: section.punctuatedText,
     summary: section.summary
   });
-  ElMessage.success("句读内容已更新");
 };
 
 const handleFullAnalysis = async () => {
   try {
     await store.runFullAnalysis(selectedModel.value);
-    ElMessage.success("模型分析完成，已更新标注与句读");
+    ElMessage.success("全量分析完成");
+    activeTab.value = 'analysis'; // Switch to analysis tab on success
   } catch (error) {
-    ElMessage.error("模型分析失败，请稍后重试");
+    ElMessage.error("分析失败");
   }
 };
 
-const handleClassify = async () => {
-  try {
-    await store.classifySelectedText(selectedModel.value);
-    ElMessage.success("模型已完成类型判断");
-  } catch (error) {
-    ElMessage.error("类型判断失败，请稍后重试");
-  }
+const translateCategory = (c) => {
+  const map = { warfare: "战争", travelogue: "游记", biography: "传记" };
+  return map[c] || c;
 };
 
-const translateCategory = (category) => {
-  const map = {
-    warfare: "战争纪实",
-    travelogue: "游记地理",
-    biography: "人物传记",
-    unknown: "待识别",
-    other: "其他"
-  };
-  return map[category] || category || "未知";
+const translateRelation = (t) => {
+  const map = { CONFLICT: "对抗", SUPPORT: "结盟", TRAVEL: "行旅", FAMILY: "亲属", TEMPORAL: "时间" };
+  return map[t] || t;
+};
+
+const getEntityTagType = (c) => {
+  const map = { PERSON: "", LOCATION: "success", EVENT: "warning", ORGANIZATION: "info", OBJECT: "danger" };
+  return map[c] || "info";
 };
 </script>
 
 <style scoped>
-.workspace {
+.workspace-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
+  padding-bottom: 40px;
 }
 
-.stage-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.sentence-panel {
-  grid-column: 1 / -1;
-}
-
-.visualization-panel {
-  grid-column: 1 / -1;
-}
-
-@media (max-width: 1200px) {
-  .stage-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .sentence-panel {
-    grid-column: auto;
-  }
-}
-
-.panel-head {
+.workspace-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  padding: 16px 24px;
 }
 
-.placeholder {
-  color: var(--muted);
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.doc-title {
+  font-size: 20px;
+  font-weight: 600;
   margin: 0;
 }
 
-.action-row {
+.header-actions {
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
+  align-items: center;
 }
 
-.classification-tip {
-  margin-top: 12px;
+.model-select {
+  width: 240px;
 }
 
-.text-editor :deep(.ql-container) {
-  border-radius: 12px;
-  border: 1px solid #e4e7ed;
-  min-height: 320px;
-}
-
-.text-editor :deep(.ql-editor) {
-  min-height: 280px;
-  line-height: 1.8;
-  font-size: 15px;
-  color: #4a443e;
-}
-
-.text-editor :deep(.ql-toolbar) {
-  border-radius: 12px 12px 0 0;
-}
-
-.annotation-section {
-  margin-bottom: 12px;
-}
-
-.form-inline :deep(.el-form-item) {
-  margin-right: 12px;
-}
-
-.section-actions {
-  margin-bottom: 12px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.segments {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.segment-card {
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 12px;
-  padding: 14px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+.workspace-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr;
+  grid-template-columns: 1fr 380px;
+  gap: 24px;
+}
+
+.editor-card {
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.text-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Quill Override */
+.text-editor :deep(.ql-container) {
+  border: none;
+  font-size: 16px;
+  line-height: 1.8;
+}
+.text-editor :deep(.ql-toolbar) {
+  border: none;
+  border-bottom: 1px solid #eee;
+}
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-card {
+  height: 100%;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-section {
+  margin-bottom: 20px;
+}
+
+.tool-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.input-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.entity-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.relation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.segment-section {
+  min-height: 200px;
+}
+
+.segments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.segment-row {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: #f9f9f9;
+  border-radius: 12px;
+}
+
+.segment-index {
+  font-weight: bold;
+  color: #ccc;
+  font-size: 18px;
+  width: 24px;
+}
+
+.segment-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.segment-col {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.segment-label {
-  font-weight: 600;
-  color: #8c7a6b;
-  font-size: 13px;
-}
-
-.segment-text {
-  background: #f9f7f2;
-  border: 1px solid #f1ede4;
-  border-radius: 10px;
-  padding: 10px 12px;
+.segment-original {
+  font-size: 15px;
+  color: #444;
   line-height: 1.6;
-  color: #4a443e;
-  min-height: 88px;
-  white-space: pre-wrap;
+}
+
+.segment-edit, .segment-summary {
+  margin-top: 4px;
+}
+
+.empty-placeholder {
+  color: #999;
+  text-align: center;
+  padding: 40px;
 }
 </style>

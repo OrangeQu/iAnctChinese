@@ -1,97 +1,124 @@
 <template>
-  <div class="documents-page" v-loading="store.loading">
-    <AuthToolbar back-to="/" />
-    <header class="page-header">
+  <div class="page-container" v-loading="store.loading">
+    <div class="header-section">
       <div>
         <h1>文档管理</h1>
-        <p class="subtitle">选择要分析的古籍文本，或上传新的材料</p>
+        <p class="subtitle">管理与分析您的古籍文献库</p>
       </div>
       <div class="actions">
-        <el-input
-          v-model="keyword"
-          placeholder="按标题或作者搜索"
-          class="search-input"
-          clearable
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <TextUploadDrawer />
-      </div>
-    </header>
-
-    <section class="stats">
-      <div class="stat-card">
-        <span class="label">总文档</span>
-        <strong class="value">{{ store.texts.length }}</strong>
-      </div>
-      <div class="stat-card">
-        <span class="label">筛选结果</span>
-        <strong class="value">{{ filteredDocuments.length }}</strong>
-      </div>
-    </section>
-
-    <el-card class="table-card">
-      <template #header>
-        <div class="card-header">
-          <span>文档列表</span>
-          <small>点击“进入文档”会打开分析工作台</small>
+        <div class="search-wrapper">
+          <el-icon class="search-icon"><Search /></el-icon>
+          <input 
+            v-model="keyword" 
+            placeholder="搜索标题或作者..." 
+            class="search-input"
+          />
         </div>
-      </template>
-      <el-table :data="filteredDocuments" stripe border>
-        <el-table-column prop="title" label="标题" min-width="220" />
-        <el-table-column
-          prop="category"
-          label="类型"
-          width="140"
-          :formatter="formatCategory"
-        />
-        <el-table-column prop="author" label="作者" width="160" />
-        <el-table-column prop="era" label="时代" width="160" />
-        <el-table-column
-          prop="updatedAt"
-          label="最近更新"
-          width="200"
-          :formatter="formatDate"
-        />
-        <el-table-column label="操作" width="360">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" @click="openDocument(row)">进入文档</el-button>
-            <el-button size="small" type="success" plain @click="openEditDialog(row)">分析工作台</el-button>
-            <el-popconfirm
-              title="删除后不可恢复，确认删除该文档？"
-              confirm-button-text="删除"
-              cancel-button-text="取消"
-              @confirm="handleDelete(row)"
-            >
-              <template #reference>
-                <el-button type="danger" size="small">删除</el-button>
-              </template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+        <el-button type="primary" @click="openUploadDrawer" size="large">
+          <el-icon class="mr-2"><Plus /></el-icon>
+          新建文档
+        </el-button>
+      </div>
+    </div>
 
-    <el-dialog v-model="editDialogVisible" title="编辑文档" width="640px">
-      <el-form :model="editForm" label-width="72px">
+    <div class="content-layout">
+      <div class="card table-card">
+        <el-table 
+          :data="filteredDocuments" 
+          style="width: 100%" 
+          size="large"
+          :header-cell-style="{ background: '#FAFAFA', color: '#666', fontWeight: '600' }"
+        >
+          <el-table-column prop="title" label="标题" min-width="240">
+            <template #default="{ row }">
+              <div class="title-cell">
+                <div class="doc-icon-mini" :class="row.category || 'unknown'">
+                  {{ (row.category || '文').charAt(0).toUpperCase() }}
+                </div>
+                <span class="doc-title" @click="openDocument(row)">{{ row.title }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="author" label="作者" width="160">
+             <template #default="{ row }">
+               <span class="author-text">{{ row.author || '佚名' }}</span>
+             </template>
+          </el-table-column>
+          <el-table-column prop="category" label="类型" width="140">
+            <template #default="{ row }">
+              <span class="category-badge" :class="row.category">{{ formatCategory(row.category) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="era" label="时代" width="120">
+             <template #default="{ row }">
+               <span class="era-tag">{{ row.era || '-' }}</span>
+             </template>
+          </el-table-column>
+          <el-table-column prop="updatedAt" label="更新时间" width="180">
+            <template #default="{ row }">
+              <span class="date-text">{{ formatDate(row.updatedAt) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="180" align="right">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-tooltip content="查看文档" placement="top">
+                  <el-button circle size="small" @click="openDocument(row)">
+                    <el-icon><View /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip content="编辑信息" placement="top">
+                  <el-button circle size="small" @click="openEditDialog(row)">
+                    <el-icon><Edit /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-popconfirm
+                  title="确认删除该文档？"
+                  @confirm="handleDelete(row)"
+                >
+                  <template #reference>
+                    <el-button circle size="small" type="danger" plain>
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </template>
+                </el-popconfirm>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+        
+        <div v-if="filteredDocuments.length === 0" class="empty-state">
+           <el-empty description="暂无文档，请点击右上角新建" />
+        </div>
+      </div>
+    </div>
+
+    <TextUploadDrawer ref="uploadDrawerRef" />
+
+    <el-dialog v-model="editDialogVisible" title="编辑文档信息" width="500px" align-center>
+      <el-form :model="editForm" label-width="80px" label-position="top">
         <el-form-item label="标题">
-          <el-input v-model="editForm.title" placeholder="如 《赤壁赋》" />
+          <el-input v-model="editForm.title" />
         </el-form-item>
-        <el-form-item label="作者">
-          <el-input v-model="editForm.author" placeholder="作者/编者" />
-        </el-form-item>
-        <el-form-item label="时代">
-          <el-input v-model="editForm.era" placeholder="如 宋" />
-        </el-form-item>
-        <el-form-item label="正文">
-          <el-input v-model="editForm.content" type="textarea" :rows="8" placeholder="粘贴完整文言文内容..." />
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="作者">
+              <el-input v-model="editForm.author" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="时代">
+              <el-input v-model="editForm.era" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="正文内容">
+          <el-input v-model="editForm.content" type="textarea" :rows="6" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveEdit">保存</el-button>
+        <el-button type="primary" @click="handleSaveEdit">保存更改</el-button>
       </template>
     </el-dialog>
   </div>
@@ -100,16 +127,17 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Search } from "@element-plus/icons-vue";
+import { Search, Plus, View, Edit, Delete } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
 import TextUploadDrawer from "@/components/layout/TextUploadDrawer.vue";
-import AuthToolbar from "@/components/layout/AuthToolbar.vue";
 
 const router = useRouter();
 const store = useTextStore();
 const keyword = ref("");
 const editDialogVisible = ref(false);
+const uploadDrawerRef = ref(null);
+
 const editForm = ref({
   id: null,
   title: "",
@@ -117,6 +145,10 @@ const editForm = ref({
   era: "",
   content: ""
 });
+
+const openUploadDrawer = () => {
+  uploadDrawerRef.value?.open();
+};
 
 onMounted(async () => {
   if (!store.texts.length) {
@@ -143,155 +175,183 @@ const categoryLabels = {
   unknown: "待识别"
 };
 
-const formatCategory = (_row, _column, value) => categoryLabels[value] || value || "未分类";
+const formatCategory = (value) => categoryLabels[value] || value || "未分类";
 
-const formatDate = (_row, _column, value) => {
-  if (!value) {
-    return "-";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
+const formatDate = (value) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString();
 };
 
 const openDocument = async (text) => {
-  if (!text?.id) {
-    return;
-  }
-  try {
-    store.selectedTextId = text.id;
-    store.selectedText = text;
-    router.push({ name: "text-workspace", params: { id: text.id } });
-  } catch (error) {
-    console.error("Failed to open document:", error);
-    ElMessage.error("加载文档失败");
-  }
+  if (!text?.id) return;
+  store.selectedTextId = text.id;
+  store.selectedText = text;
+  router.push({ name: "text-workspace", params: { id: text.id } });
 };
 
 const openEditDialog = (text) => {
-  if (!text?.id) return;
-  editForm.value = {
-    id: text.id,
-    title: text.title || "",
-    author: text.author || "",
-    era: text.era || "",
-    content: text.content || ""
-  };
+  editForm.value = { ...text };
   editDialogVisible.value = true;
 };
 
 const handleDelete = async (text) => {
-  if (!text?.id) {
-    return;
-  }
   try {
     await store.deleteText(text.id);
     ElMessage.success("文档已删除");
   } catch (error) {
-    console.error("Failed to delete text:", error);
-    ElMessage.error("删除失败，请稍后再试");
+    ElMessage.error("删除失败");
   }
 };
 
 const handleSaveEdit = async () => {
-  if (!editForm.value.id) {
-    return;
-  }
   try {
-    await store.updateText(editForm.value.id, {
-      title: editForm.value.title,
-      author: editForm.value.author,
-      era: editForm.value.era,
-      content: editForm.value.content,
-      category: editForm.value.category
-    });
-    ElMessage.success("文档已保存");
+    await store.updateText(editForm.value.id, editForm.value);
+    ElMessage.success("保存成功");
     editDialogVisible.value = false;
   } catch (error) {
-    console.error("Failed to save text:", error);
-    ElMessage.error("保存失败，请稍后再试");
+    ElMessage.error("保存失败");
   }
 };
 </script>
 
 <style scoped>
-.documents-page {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: #f7f8fc;
-  min-height: calc(100vh - 48px);
-}
-
-.page-header {
+.header-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  margin-bottom: 32px;
 }
 
-.page-header h1 {
-  margin: 0;
-  font-size: 28px;
+h1 {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
 }
 
 .subtitle {
-  margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 16px;
 }
 
 .actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.search-wrapper {
+  position: relative;
+  width: 320px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px 12px 44px;
+  border-radius: 50px;
+  border: 1px solid transparent;
+  background: white;
+  box-shadow: var(--shadow-sm);
+  outline: none;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.search-input:focus {
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.05);
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+.table-card {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 24px;
+  border: none;
+}
+
+.title-cell {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.search-input {
-  width: 240px;
-}
-
-.stats {
+.doc-icon-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
   display: flex;
-  gap: 16px;
-}
-
-.stat-card {
-  flex: 1;
-  background: white;
-  border-radius: 12px;
-  padding: 16px 20px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-}
-
-.stat-card .label {
-  display: block;
-  color: #9ca3af;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-
-.stat-card .value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.table-card {
-  flex: 1;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-weight: 600;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
-.card-header small {
-  color: #9ca3af;
-  font-weight: 400;
+.doc-icon-mini.warfare { background: #FFE8E8; color: #FF6B6B; }
+.doc-icon-mini.travelogue { background: #E8FDF5; color: #06D6A0; }
+.doc-icon-mini.biography { background: #E8F4FF; color: #118AB2; }
+.doc-icon-mini.unknown { background: #F0F0F0; color: #999; }
+
+.doc-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.doc-title:hover {
+  color: var(--primary-color);
+}
+
+.author-text {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.category-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #f0f0f0;
+  color: #666;
+}
+
+.category-badge.warfare { color: #FF6B6B; background: #FFF0F0; }
+.category-badge.travelogue { color: #06D6A0; background: #F0FDF9; }
+.category-badge.biography { color: #118AB2; background: #F0F8FF; }
+
+.era-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #888;
+}
+
+.date-text {
+  color: #999;
+  font-size: 13px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.empty-state {
+  padding: 40px 0;
+  display: flex;
+  justify-content: center;
 }
 </style>

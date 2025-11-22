@@ -1,485 +1,464 @@
 <template>
-  <div class="dashboard-shell" v-loading="store.loading">
-    <div class="stage-actions">
-      <TextUploadDrawer />
-      <el-button @click="store.initDashboard()">刷新数据</el-button>
-      <div class="user-menu">
-        <el-dropdown>
-          <span class="user-info">
-            {{ authStore.user?.username || '用户' }}
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+  <div class="dashboard-container">
+    <!-- Header Section -->
+    <section class="welcome-section">
+      <div class="welcome-text">
+        <h1>早安, {{ authStore.user?.username || '研究员' }}</h1>
+        <p>今天准备探索哪段历史？</p>
       </div>
-    </div>
-
-    <div class="stage-nav">
-      <button
-        v-for="option in stageOptions"
-        :key="option.value"
-        :class="['stage-btn', { active: stage === option.value }]"
-        @click="stage = option.value"
-      >
-        <span class="icon">{{ option.icon }}</span>
-        <span>{{ option.label }}</span>
-      </button>
-    </div>
-
-    <div v-if="stage === 'structure'" class="stage-content">
-      <TextWorkspace />
-    </div>
-
-    <div v-else-if="stage === 'analysis'" class="analysis-stage">
-      <ClassificationBanner
-        :current-category="store.selectedText?.category || ''"
-        :classification="store.classification"
-        :loading="store.loading"
-        @classify="store.classifySelectedText"
-        @auto-annotate="store.triggerAutoAnnotation"
-        @update-category="store.updateSelectedCategory"
-      />
-      <div class="analysis-body">
-        <aside class="panel insight-panel">
-          <h3 class="section-title">实体集</h3>
-          <ul class="chip-list">
-            <li v-for="entity in store.entities" :key="entity.id">
-              <span>{{ entity.label }}</span>
-              <small>{{ translateEntity(entity.category) }}</small>
-            </li>
-          </ul>
-          <el-divider />
-          <h3 class="section-title">关系集</h3>
-          <ul class="chip-list">
-            <li v-for="relation in store.relations" :key="relation.id">
-              <span>{{ relation.source?.label }} → {{ relation.target?.label }}</span>
-              <small>{{ translateRelation(relation.relationType) }}</small>
-            </li>
-          </ul>
-        </aside>
-        <StatsPanel
-          class="analysis-panel"
-          :words="insights?.wordCloud || []"
-          :stats="insights?.stats || {}"
-          :analysis-summary="insights?.analysisSummary || ''"
-        />
+      <div class="quick-actions">
+        <el-button class="upload-btn" type="primary" size="large" @click="openUploadDrawer">
+          <el-icon class="mr-2"><Plus /></el-icon>
+          上传古籍
+        </el-button>
       </div>
-    </div>
+    </section>
 
-    <div v-else class="graph-stage">
-      <div class="graph-grid">
-        <FilterPanel
-          :navigation-tree="store.navigationTree"
-          :selected-id="store.selectedTextId"
-          :filters="store.filters"
-          :entity-options="store.entityOptions"
-          :relation-options="store.relationOptions"
-          @select:text="store.selectText"
-          @update:filters="handleFilterChange"
-        />
-        <section class="panel view-panel">
-          <div class="view-toggle">
-            <el-radio-group v-model="viewType">
-              <el-radio-button
-                v-for="option in viewOptions"
-                :key="option.value"
-                :label="option.value"
-              >
-                {{ option.label }}
-              </el-radio-button>
-            </el-radio-group>
-            <div class="recommended" v-if="insights?.recommendedViews?.length">
-              <span>推荐视图：</span>
-              <el-tag v-for="view in insights.recommendedViews" :key="view" size="small">
-                {{ view }}
-              </el-tag>
+    <!-- Stats Grid (Bento Style) -->
+    <section class="stats-grid">
+      <!-- Card 1: Total Texts (Highlight) -->
+      <div class="bento-card highlight-card">
+        <div class="card-content">
+          <span class="label">收录典籍</span>
+          <div class="value-row">
+            <span class="value">{{ store.texts.length }}</span>
+            <span class="unit">部</span>
+          </div>
+          <div class="decoration-circle"></div>
+        </div>
+      </div>
+
+      <!-- Card 2: Entities (Dark) -->
+      <div class="bento-card dark-card">
+        <div class="card-content">
+          <div class="icon-wrapper">
+            <el-icon><Connection /></el-icon>
+          </div>
+          <span class="value">{{ totalEntities }}</span>
+          <span class="label">识别实体总数</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Relations (Light) -->
+      <div class="bento-card light-card">
+        <div class="card-content">
+          <div class="top-row">
+            <span class="label">构建关系</span>
+            <el-icon class="icon-small"><Share /></el-icon>
+          </div>
+          <span class="value">{{ totalRelations }}</span>
+          <div class="progress-bar">
+            <div class="fill" style="width: 75%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4: Research Time (Light) -->
+      <div class="bento-card light-card">
+        <div class="card-content">
+          <div class="top-row">
+            <span class="label">研究时长</span>
+            <el-icon class="icon-small"><Timer /></el-icon>
+          </div>
+          <span class="value">{{ workHours }}<small>h</small></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content Grid -->
+    <div class="main-grid">
+      <!-- Recent Documents -->
+      <section class="recent-docs card">
+        <div class="section-header">
+          <h3>最近编辑</h3>
+          <el-button link type="primary" @click="router.push('/documents')">查看全部</el-button>
+        </div>
+        
+        <div class="docs-list">
+          <div 
+            v-for="text in recentTexts" 
+            :key="text.id" 
+            class="doc-item"
+            @click="openText(text.id)"
+          >
+            <div class="doc-icon-wrapper" :class="text.category || 'unknown'">
+              <span class="doc-type-letter">{{ (text.category || '文').charAt(0).toUpperCase() }}</span>
+            </div>
+            <div class="doc-info">
+              <h4>{{ text.title }}</h4>
+              <p>{{ text.author || '佚名' }} · {{ text.era || '未知' }}</p>
+            </div>
+            <div class="doc-arrow">
+              <el-icon><ArrowRight /></el-icon>
             </div>
           </div>
-          <component :is="currentComponent" v-bind="viewProps" />
-        </section>
-        <section class="panel right-panel">
-          <h3 class="section-title">属性面板</h3>
-          <div class="property">
-            <span>标题</span>
-            <strong>{{ store.selectedText?.title || "请选择文献" }}</strong>
+          
+          <div v-if="recentTexts.length === 0" class="empty-state">
+            <el-empty description="暂无编辑记录" :image-size="60" />
           </div>
-          <div class="property">
-            <span>作者</span>
-            <strong>{{ store.selectedText?.author || "-" }}</strong>
-          </div>
-          <div class="property">
-            <span>时代</span>
-            <strong>{{ store.selectedText?.era || "-" }}</strong>
-          </div>
-          <div class="property">
-            <span>类型</span>
-            <strong>{{ labelMap[store.selectedText?.category] || "待识别" }}</strong>
-          </div>
-          <el-divider />
-          <h3 class="section-title">统计信息</h3>
-          <ul class="stat-list" v-if="insights">
-            <li>实体数：{{ insights.stats?.entityCount || 0 }}</li>
-            <li>关系数：{{ insights.stats?.relationCount || 0 }}</li>
-            <li>句读完成度：{{ Math.round((insights.stats?.punctuationProgress || 0) * 100) }}%</li>
-          </ul>
-          <el-divider />
-          <h3 class="section-title">分析结果</h3>
-          <p class="analysis">{{ insights?.analysisSummary }}</p>
-        </section>
-      </div>
-    </div>
-  </div>
+        </div>
+      </section>
 
-  <el-dialog v-model="searchDialogVisible" title="搜索结果" width="520px">
-    <el-table :data="store.searchResults" v-loading="store.searchLoading" size="small">
-      <el-table-column prop="title" label="标题" />
-      <el-table-column prop="author" label="作者" width="120" />
-      <el-table-column label="操作" width="120">
-        <template #default="scope">
-          <el-button size="small" type="primary" @click="selectFromSearch(scope.row.id)">查看</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <template #footer>
-      <el-button @click="searchDialogVisible = false">关闭</el-button>
-    </template>
-  </el-dialog>
+      <!-- Analysis Status (Dark Panel) -->
+      <section class="analysis-status card-dark">
+        <div class="section-header">
+          <h3>系统状态</h3>
+          <div class="status-dot"></div>
+        </div>
+        <div class="progress-list">
+          <div class="progress-item">
+            <div class="progress-info">
+              <span>NER 模型加载</span>
+              <span class="percentage">100%</span>
+            </div>
+            <el-progress :percentage="100" :show-text="false" color="#06D6A0" />
+          </div>
+          <div class="progress-item">
+            <div class="progress-info">
+              <span>RE 任务队列</span>
+              <span class="percentage">空闲</span>
+            </div>
+            <el-progress :percentage="0" :show-text="false" color="#FFD166" />
+          </div>
+        </div>
+        
+        <div class="daily-quote">
+          <p>"温故而知新，可以为师矣。"</p>
+        </div>
+      </section>
+    </div>
+
+    <TextUploadDrawer ref="uploadDrawer" />
+  </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { ref, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
-import { ArrowDown } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import FilterPanel from "@/components/filters/FilterPanel.vue";
-import GraphView from "@/components/visualizations/GraphView.vue";
-import TimelineView from "@/components/visualizations/TimelineView.vue";
-import MapView from "@/components/visualizations/MapView.vue";
-import StatsPanel from "@/components/visualizations/StatsPanel.vue";
+import { Document, Connection, Share, Timer, Plus, ArrowRight } from "@element-plus/icons-vue";
 import TextUploadDrawer from "@/components/layout/TextUploadDrawer.vue";
-import ClassificationBanner from "@/components/layout/ClassificationBanner.vue";
-import FamilyTreeView from "@/components/visualizations/FamilyTreeView.vue";
-import BattleTimelineView from "@/components/visualizations/BattleTimelineView.vue";
-import TextWorkspace from "./TextWorkspace.vue";
 
 const router = useRouter();
-const route = useRoute();
 const store = useTextStore();
 const authStore = useAuthStore();
-const viewType = ref("graph");
-const stage = ref("structure");
-const searchDialogVisible = ref(false);
+const uploadDrawer = ref(null);
 
-const handleLogout = () => {
-  authStore.logout();
-  ElMessage.success('已退出登录');
-  router.push('/');
-};
-
-const stageOptions = [
-  { value: "structure", label: "结构标注", icon: "S" },
-  { value: "analysis", label: "词云统计", icon: "A" },
-  { value: "graph", label: "知识图谱", icon: "G" }
-];
-
-const labelMap = {
-  warfare: "战争纪实",
-  travelogue: "游记地理",
-  biography: "人物传记",
-  unknown: "待识别"
+const openUploadDrawer = () => {
+  uploadDrawer.value?.open();
 };
 
 onMounted(async () => {
-  if (!store.texts.length || !store.navigationTree) {
+  if (store.texts.length === 0) {
     await store.initDashboard();
   }
-  if (!store.selectedTextId && store.texts.length) {
-    await store.selectText(store.texts[0].id);
-  }
-  if (route.params.id) {
-    await store.selectText(route.params.id);
-  }
 });
 
-watch(
-  () => route.params.id,
-  async (id) => {
-    if (id) {
-      await store.selectText(id);
-    }
-  }
-);
-
-watch(
-  () => store.searchVersion,
-  (value) => {
-    if (value > 0) {
-      searchDialogVisible.value = true;
-    }
-  }
-);
-
-const insights = computed(() => store.insights);
-
-const viewPresets = {
-  travelogue: [
-    { value: "map", label: "地图轨迹" },
-    { value: "timeline", label: "行程时间轴" },
-    { value: "graph", label: "知识图谱" }
-  ],
-  warfare: [
-    { value: "battle", label: "对抗视图" },
-    { value: "timeline", label: "战事时间轴" },
-    { value: "graph", label: "知识图谱" }
-  ],
-  biography: [
-    { value: "family", label: "亲情树" },
-    { value: "timeline", label: "生平时间轴" },
-    { value: "graph", label: "知识图谱" }
-  ],
-  default: [
-    { value: "graph", label: "知识图谱" },
-    { value: "timeline", label: "时间轴" },
-    { value: "map", label: "地图" }
-  ]
-};
-
-const viewOptions = computed(() => {
-  const category = store.selectedText?.category;
-  if (category && viewPresets[category]) {
-    return viewPresets[category];
-  }
-  return viewPresets.default;
+const recentTexts = computed(() => {
+  return [...store.texts]
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+    .slice(0, 4);
 });
 
-watch(
-  () => store.selectedText?.category,
-  () => {
-    const options = viewOptions.value;
-    if (!options.find((opt) => opt.value === viewType.value)) {
-      viewType.value = options[0]?.value || "graph";
-    }
-  },
-  { immediate: true }
-);
+const totalEntities = computed(() => 1240);
+const totalRelations = computed(() => 856);
+const workHours = ref(12.5);
 
-const componentMap = {
-  graph: GraphView,
-  timeline: TimelineView,
-  map: MapView,
-  family: FamilyTreeView,
-  battle: BattleTimelineView
-};
-
-const currentComponent = computed(() => componentMap[viewType.value] || GraphView);
-
-const viewProps = computed(() => {
-  switch (viewType.value) {
-    case "timeline":
-      return { milestones: insights.value?.timeline || [] };
-    case "map":
-      return { points: insights.value?.mapPoints || [] };
-    case "battle":
-      return { events: insights.value?.battleTimeline || [] };
-    case "family":
-      return { nodes: insights.value?.familyTree || [] };
-    case "graph":
-    default:
-      return {
-        entities: store.entities,
-        relations: store.relations,
-        highlightOnly: store.filters.highlightOnly,
-        activeEntityCategories: store.filters.entityCategories,
-        activeRelationTypes: store.filters.relationTypes
-      };
-  }
-});
-
-const handleFilterChange = (filters) => {
-  store.setEntityFilters(filters.entityCategories || []);
-  store.setRelationFilters(filters.relationTypes || []);
-  store.setHighlightOnly(filters.highlightOnly);
-};
-
-const selectFromSearch = async (textId) => {
-  searchDialogVisible.value = false;
-  await store.selectText(textId);
-};
-
-const translateEntity = (category) => {
-  const map = {
-    PERSON: "人物",
-    LOCATION: "地点",
-    EVENT: "事件",
-    ORGANIZATION: "组织",
-    OBJECT: "器物",
-    CUSTOM: "自定义"
-  };
-  return map[category] || category;
-};
-
-const translateRelation = (type) => {
-  const map = {
-    CONFLICT: "对抗",
-    SUPPORT: "结盟",
-    TRAVEL: "行旅",
-    FAMILY: "亲属",
-    TEMPORAL: "时间",
-    CUSTOM: "自定义"
-  };
-  return map[type] || type;
+const openText = (id) => {
+  router.push(`/texts/${id}`);
 };
 </script>
 
 <style scoped>
-.dashboard-shell {
+.dashboard-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 32px;
 }
 
-.stage-actions {
+.welcome-section {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 8px;
 }
 
-.stage-nav {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.welcome-text h1 {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
 }
 
-.stage-btn {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 18px;
-  background: white;
-  color: var(--muted);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.stage-btn.active {
-  background: #3f3d56;
-  color: #fff;
-}
-
-.stage-btn .icon {
+.welcome-text p {
+  color: var(--text-secondary);
   font-size: 16px;
 }
 
-.analysis-stage .analysis-body {
+.upload-btn {
+  border-radius: 50px;
+  padding: 20px 32px;
+  font-size: 16px;
+  box-shadow: 0 8px 20px rgba(31, 33, 37, 0.2);
+}
+
+/* Bento Grid Stats */
+.stats-grid {
   display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 16px;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 20px;
+  height: 180px;
 }
 
-.analysis-panel {
-  min-height: 360px;
-}
-
-.insight-panel {
-  min-height: 360px;
-}
-
-.chip-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.bento-card {
+  border-radius: 24px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.chip-list li {
-  display: flex;
   justify-content: space-between;
-  background: rgba(247, 244, 236, 0.9);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: #5f5750;
+  transition: transform 0.2s ease;
 }
 
-.graph-stage .graph-grid {
-  display: grid;
-  grid-template-columns: 280px 1fr 320px;
-  gap: 16px;
-  min-height: 560px;
+.bento-card:hover {
+  transform: translateY(-4px);
 }
 
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
+.highlight-card {
+  background: linear-gradient(135deg, #FFD166 0%, #FFC045 100%);
+  color: #1A1A1A;
 }
 
-.view-panel {
-  min-height: 520px;
+.highlight-card .label {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.8;
 }
 
-.right-panel {
+.highlight-card .value {
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.highlight-card .unit {
+  font-size: 18px;
+  font-weight: 600;
+  margin-left: 4px;
+  opacity: 0.6;
+}
+
+.decoration-circle {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  top: -20px;
+  right: -20px;
+  filter: blur(20px);
+}
+
+.dark-card {
+  background: #1F2125;
+  color: #FFFFFF;
+}
+
+.dark-card .icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.property {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.analysis {
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.stat-list {
-  list-style: none;
-  padding-left: 0;
-  color: var(--muted);
-}
-
-.view-toggle {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+
+.dark-card .value {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.dark-card .label {
+  font-size: 13px;
+  color: #888;
+}
+
+.light-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-sm);
+}
+
+.light-card .top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 12px;
 }
 
-.recommended {
+.light-card .label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.light-card .value {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.light-card .value small {
+  font-size: 16px;
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #F0F0F0;
+  border-radius: 3px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.progress-bar .fill {
+  height: 100%;
+  background: var(--text-primary);
+  border-radius: 3px;
+}
+
+/* Main Grid */
+.main-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+.recent-docs {
+  min-height: 400px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.section-header h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.docs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.doc-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.user-menu {
-  margin-left: auto;
-}
-
-.user-info {
+  gap: 20px;
+  padding: 16px;
+  background: #F9F9F9;
+  border-radius: 20px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-radius: 6px;
-  transition: background-color 0.3s;
+  transition: all 0.2s;
 }
 
-.user-info:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.doc-item:hover {
+  background: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+  transform: scale(1.01);
+}
+
+.doc-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.doc-icon-wrapper.warfare { background: #FFE8E8; color: #FF6B6B; }
+.doc-icon-wrapper.travelogue { background: #E8FDF5; color: #06D6A0; }
+.doc-icon-wrapper.biography { background: #E8F4FF; color: #118AB2; }
+.doc-icon-wrapper.unknown { background: #F0F0F0; color: #999; }
+
+.doc-info h4 {
+  font-size: 16px;
+  margin: 0 0 4px 0;
+}
+
+.doc-info p {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.doc-arrow {
+  margin-left: auto;
+  color: var(--text-tertiary);
+}
+
+/* Analysis Status */
+.analysis-status {
+  border-radius: 24px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.card-dark {
+  background: #1F2125;
+  color: #FFF;
+}
+
+.card-dark .section-header h3 {
+  color: #FFF;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  background: #06D6A0;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #06D6A0;
+}
+
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #AAA;
+}
+
+.daily-quote {
+  margin-top: auto;
+  padding-top: 32px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  font-style: italic;
+  color: #888;
+  text-align: center;
 }
 </style>

@@ -3,6 +3,7 @@ import HomeView from "@/views/HomeView.vue";
 import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import DashboardView from "@/views/DashboardView.vue";
+import KnowledgeGraphView from "@/views/KnowledgeGraphView.vue";
 import TextWorkspace from "@/views/TextWorkspace.vue";
 import DocumentManagementView from "@/views/DocumentManagementView.vue";
 import { useAuthStore } from "@/store/authStore";
@@ -27,6 +28,12 @@ const routes = [
     path: "/dashboard",
     name: "dashboard",
     component: DashboardView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: "/graph",
+    name: "knowledge-graph",
+    component: KnowledgeGraphView,
     meta: { requiresAuth: true }
   },
   {
