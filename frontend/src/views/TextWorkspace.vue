@@ -8,12 +8,13 @@
         </div>
         <QuillEditor
           v-if="store.selectedText"
-          v-model:content="editableContent"
+          :content="editableContent"
+          @update:content="(val) => editableContent = val"
           class="text-editor"
           theme="snow"
           content-type="text"
           :read-only="savingContent"
-          @blur="handleContentSave()"
+          @blur="handleContentSave"
         />
         <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文章</p>
         <el-divider />
@@ -56,10 +57,10 @@
           <h3 class="section-title">实体标注</h3>
           <el-form :model="entityForm" inline class="form-inline">
             <el-form-item label="名称">
-              <el-input v-model="entityForm.label" placeholder="例：周瑜" />
+              <el-input v-model="entityForm.label" placeholder="例：周瑜" style="width: 180px" />
             </el-form-item>
             <el-form-item label="类别">
-              <el-select v-model="entityForm.category" placeholder="实体类别">
+              <el-select v-model="entityForm.category" placeholder="实体类别" style="width: 80px">
                 <el-option label="人物" value="PERSON" />
                 <el-option label="地点" value="LOCATION" />
                 <el-option label="事件" value="EVENT" />
@@ -67,14 +68,7 @@
                 <el-option label="器物" value="OBJECT" />
               </el-select>
             </el-form-item>
-            <el-form-item label="起止">
-              <el-input-number v-model="entityForm.startOffset" :min="0" />
-              <span> - </span>
-              <el-input-number v-model="entityForm.endOffset" :min="0" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="submitEntity">添加实体</el-button>
-            </el-form-item>
+            <el-button type="primary" @click="submitEntity" class="align-button">添加实体</el-button>
           </el-form>
           <el-table :data="entities" border size="small" height="220">
             <el-table-column prop="label" label="实体" width="120" />
@@ -87,7 +81,7 @@
           <h3 class="section-title">关系标注</h3>
           <el-form :model="relationForm" inline class="form-inline">
             <el-form-item label="实体A">
-              <el-select v-model="relationForm.sourceEntityId" placeholder="选择实体">
+              <el-select v-model="relationForm.sourceEntityId" placeholder="选择实体" style="width: 100px">
                 <el-option
                   v-for="entity in entities"
                   :key="entity.id"
@@ -97,7 +91,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="实体B">
-              <el-select v-model="relationForm.targetEntityId" placeholder="选择实体">
+              <el-select v-model="relationForm.targetEntityId" placeholder="选择实体" style="width: 100px">
                 <el-option
                   v-for="entity in entities"
                   :key="`target-${entity.id}`"
@@ -107,7 +101,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="关系">
-              <el-select v-model="relationForm.relationType" placeholder="关系类型">
+              <el-select v-model="relationForm.relationType" placeholder="关系类型" style="width: 100px">
                 <el-option label="对抗" value="CONFLICT" />
                 <el-option label="结盟" value="SUPPORT" />
                 <el-option label="行旅" value="TRAVEL" />
@@ -481,6 +475,10 @@ const translateCategory = (category) => {
 
 .form-inline :deep(.el-form-item) {
   margin-right: 12px;
+}
+
+.align-button {
+  margin-top: 2px;
 }
 
 .section-actions {
