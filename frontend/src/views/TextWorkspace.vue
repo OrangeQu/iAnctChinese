@@ -8,12 +8,13 @@
         </div>
         <QuillEditor
           v-if="store.selectedText"
-          v-model:content="editableContent"
+          :content="editableContent"
+          @update:content="(val) => editableContent = val"
           class="text-editor"
           theme="snow"
           content-type="text"
           :read-only="savingContent"
-          @blur="handleContentSave()"
+          @blur="handleContentSave"
         />
         <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文章</p>
         <el-divider />
