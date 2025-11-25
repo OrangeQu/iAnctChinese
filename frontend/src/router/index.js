@@ -1,8 +1,9 @@
-﻿import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "@/views/HomeView.vue";
 import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import DashboardView from "@/views/DashboardView.vue";
+import TextWorkspace from "@/views/TextWorkspace.vue";
 import DocumentManagementView from "@/views/DocumentManagementView.vue";
 import { useAuthStore } from "@/store/authStore";
 
@@ -37,7 +38,7 @@ const routes = [
   {
     path: "/texts/:id",
     name: "text-workspace",
-    component: DashboardView,
+    component: TextWorkspace,
     props: true,
     meta: { requiresAuth: true }
   }

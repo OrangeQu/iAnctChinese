@@ -1,10 +1,12 @@
 <template>
   <div class="dashboard-shell" v-loading="store.loading">
     <div class="stage-actions">
+      <TextUploadDrawer />
+      <el-button @click="store.initDashboard()">刷新数据</el-button>
       <div class="user-menu">
         <el-dropdown>
           <span class="user-info">
-            {{ authStore.user?.username || "用户" }}
+            {{ authStore.user?.username || '用户' }}
             <el-icon class="el-icon--right"><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
@@ -43,7 +45,7 @@
       />
       <div class="analysis-body">
         <aside class="panel insight-panel">
-          <h3 class="section-title">实体列表</h3>
+          <h3 class="section-title">实体集</h3>
           <ul class="chip-list">
             <li v-for="entity in store.entities" :key="entity.id">
               <span>{{ entity.label }}</span>
@@ -51,7 +53,7 @@
             </li>
           </ul>
           <el-divider />
-          <h3 class="section-title">关系列表</h3>
+          <h3 class="section-title">关系集</h3>
           <ul class="chip-list">
             <li v-for="relation in store.relations" :key="relation.id">
               <span>{{ relation.source?.label }} → {{ relation.target?.label }}</span>
@@ -130,6 +132,8 @@
         </section>
       </div>
     </div>
+  </div>
+
   <el-dialog v-model="searchDialogVisible" title="搜索结果" width="520px">
     <el-table :data="store.searchResults" v-loading="store.searchLoading" size="small">
       <el-table-column prop="title" label="标题" />
@@ -144,7 +148,6 @@
       <el-button @click="searchDialogVisible = false">关闭</el-button>
     </template>
   </el-dialog>
-  </div>
 </template>
 
 <script setup>
@@ -152,14 +155,13 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
-import { ArrowDown } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ArrowDown } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import FilterPanel from "@/components/filters/FilterPanel.vue";
 import GraphView from "@/components/visualizations/GraphView.vue";
 import TimelineView from "@/components/visualizations/TimelineView.vue";
 import MapView from "@/components/visualizations/MapView.vue";
 import StatsPanel from "@/components/visualizations/StatsPanel.vue";
-import WordCloudCanvas from "@/components/visualizations/WordCloudCanvas.vue";
 import TextUploadDrawer from "@/components/layout/TextUploadDrawer.vue";
 import ClassificationBanner from "@/components/layout/ClassificationBanner.vue";
 import FamilyTreeView from "@/components/visualizations/FamilyTreeView.vue";
@@ -176,8 +178,8 @@ const searchDialogVisible = ref(false);
 
 const handleLogout = () => {
   authStore.logout();
-  ElMessage.success("已退出登录");
-  router.push("/");
+  ElMessage.success('已退出登录');
+  router.push('/');
 };
 
 const stageOptions = [
@@ -228,22 +230,22 @@ const insights = computed(() => store.insights);
 const viewPresets = {
   travelogue: [
     { value: "map", label: "地图轨迹" },
-    { value: "timeline", label: "行程时间线" },
+    { value: "timeline", label: "行程时间轴" },
     { value: "graph", label: "知识图谱" }
   ],
   warfare: [
     { value: "battle", label: "对抗视图" },
-    { value: "timeline", label: "战事时间线" },
+    { value: "timeline", label: "战事时间轴" },
     { value: "graph", label: "知识图谱" }
   ],
   biography: [
     { value: "family", label: "亲情树" },
-    { value: "timeline", label: "生平时间线" },
+    { value: "timeline", label: "生平时间轴" },
     { value: "graph", label: "知识图谱" }
   ],
   default: [
     { value: "graph", label: "知识图谱" },
-    { value: "timeline", label: "时间线" },
+    { value: "timeline", label: "时间轴" },
     { value: "map", label: "地图" }
   ]
 };
@@ -272,16 +274,13 @@ const componentMap = {
   timeline: TimelineView,
   map: MapView,
   family: FamilyTreeView,
-  battle: BattleTimelineView,
-  cloud: WordCloudCanvas
+  battle: BattleTimelineView
 };
 
 const currentComponent = computed(() => componentMap[viewType.value] || GraphView);
 
 const viewProps = computed(() => {
   switch (viewType.value) {
-    case "cloud":
-      return { words: insights.value?.wordCloud || [] };
     case "timeline":
       return { milestones: insights.value?.timeline || [] };
     case "map":
@@ -342,24 +341,19 @@ const translateRelation = (type) => {
 .dashboard-shell {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 0px;
+  gap: 16px;
 }
 
 .stage-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-bottom: 4px;
 }
 
 .stage-nav {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 0;
-  margin-bottom: 4px;
-
 }
 
 .stage-btn {
