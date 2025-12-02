@@ -1,19 +1,12 @@
-<template>
+﻿<template>
   <section class="panel filter-panel">
-    <h3 class="section-title">文献列表</h3>
-    <el-tree
-      v-if="treeData.length"
-      :data="treeData"
-      node-key="id"
-      :current-node-key="currentNodeKey"
-      class="nav-tree"
-      default-expand-all
-      highlight-current
-      ref="treeRef"
-      @node-click="handleNodeClick"
-    />
+    <div class="filter-header">
+      <h3 class="section-title">过滤器</h3>
+      <p class="hint">
+        {{ showRelationFilters ? "勾选想要展示的实体与关系" : "勾选想要展示的实体" }}
+      </p>
+    </div>
 
-    <h3 class="section-title">过滤器</h3>
     <div class="filter-block">
       <strong>实体类别</strong>
       <el-checkbox-group
@@ -26,7 +19,7 @@
       </el-checkbox-group>
     </div>
 
-    <div class="filter-block">
+    <div v-if="showRelationFilters" class="filter-block">
       <strong>关系类型</strong>
       <el-checkbox-group
         v-model="localFilters.relationTypes"
@@ -39,6 +32,7 @@
     </div>
 
     <el-switch
+      v-if="showRelationFilters"
       v-model="localFilters.highlightOnly"
       inline-prompt
       active-text="只显示高亮实体"
@@ -55,21 +49,14 @@
         </div>
       </div>
     </div>
+
   </section>
 </template>
 
 <script setup>
-import { reactive, watch, computed, ref } from "vue";
+import { reactive, watch } from "vue";
 
 const props = defineProps({
-  navigationTree: {
-    type: Object,
-    default: () => ({ categories: [] })
-  },
-  selectedId: {
-    type: Number,
-    default: null
-  },
   filters: {
     type: Object,
     default: () => ({
@@ -77,6 +64,10 @@ const props = defineProps({
       relationTypes: [],
       highlightOnly: false
     })
+  },
+  showRelationFilters: {
+    type: Boolean,
+    default: true
   },
   entityOptions: {
     type: Array,
@@ -88,40 +79,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(["select:text", "update:filters"]);
-
-const treeRef = ref();
-
-const treeData = computed(() => {
-  if (!props.navigationTree || !props.navigationTree.categories) {
-    return [];
-  }
-  return props.navigationTree.categories.map((category) => ({
-    id: `cat-${category.category}`,
-    label: `${category.label} (${category.texts.length})`,
-    type: "category",
-    children: (category.texts || []).map((text) => ({
-      id: `text-${text.id}`,
-      label: text.title,
-      type: "text",
-      textId: text.id,
-      children: (text.sections || []).map((section) => ({
-        id: `section-${section.id}`,
-        label: `${section.sequenceIndex}. ${section.summary || "未命名片段"}`,
-        type: "section",
-        textId: text.id,
-        sectionId: section.id
-      }))
-    }))
-  }));
-});
-
-const currentNodeKey = computed(() => {
-  if (!props.selectedId) {
-    return "";
-  }
-  return `text-${props.selectedId}`;
-});
+const emit = defineEmits(["update:filters"]);
 
 const localFilters = reactive({
   entityCategories: [],
@@ -138,23 +96,6 @@ watch(
   },
   { immediate: true, deep: true }
 );
-
-watch(
-  () => props.selectedId,
-  (next) => {
-    if (!treeRef.value) {
-      return;
-    }
-    const key = next ? `text-${next}` : null;
-    treeRef.value.setCurrentKey(key);
-  }
-);
-
-const handleNodeClick = (node) => {
-  if (node.type === "text" || node.type === "section") {
-    emit("select:text", Number(node.textId));
-  }
-};
 
 const emitFilters = () => {
   emit("update:filters", { ...localFilters });
@@ -187,21 +128,15 @@ const relationMap = {
 const translateEntity = (key) => entityMap[key] || key;
 const translateRelation = (key) => relationMap[key] || key;
 
+// 与地图标注颜色保持一致
 const legendItems = [
-  { label: "人物", color: "#d16a5d" },
-  { label: "地点", color: "#3a7a87" },
-  { label: "事件", color: "#a58938" }
+  { label: "人物", color: "#e74c3c" },
+  { label: "地点", color: "#2ecc71" },
+  { label: "事件", color: "#f1c40f" }
 ];
 </script>
 
 <style scoped>
-.nav-tree {
-  max-height: 360px;
-  min-height: 280px;
-  overflow: auto;
-  margin-bottom: 16px;
-}
-
 .filter-block {
   margin-bottom: 12px;
 }
@@ -209,10 +144,12 @@ const legendItems = [
 .filter-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  height: calc(100vh - 120px);
-  overflow: auto;
-  padding-bottom: 12px;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #eadfce;
+  background: linear-gradient(180deg, #fffaf1 0%, #fff 80%);
+  box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08);
+  border-radius: 16px;
 }
 
 .legend {
@@ -232,5 +169,38 @@ const legendItems = [
   width: 12px;
   height: 12px;
   border-radius: 50%;
+}
+
+.stats-block {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.filter-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hint {
+  margin: 0;
+  color: #8c7a6b;
+  font-size: 12px;
+}
+
+.sub-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #8c7a6b;
+}
+
+.stat-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #4a443e;
 }
 </style>
