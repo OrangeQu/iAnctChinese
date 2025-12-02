@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="dashboard-shell" v-loading="store.loading">
     <div class="stage-actions">
       <div class="user-menu">
@@ -16,6 +16,7 @@
       </div>
     </div>
 
+    <!-- 阶段导航 -->
     <div class="stage-nav">
       <button
         v-for="option in stageOptions"
@@ -28,10 +29,12 @@
       </button>
     </div>
 
+    <!-- 1. 结构化阶段 -->
     <div v-if="stage === 'structure'" class="stage-content">
       <TextWorkspace />
     </div>
 
+    <!-- 2. 统计分析阶段 -->
     <div v-else-if="stage === 'analysis'" class="analysis-stage">
       <ClassificationBanner
         :current-category="store.selectedText?.category || ''"
@@ -50,14 +53,6 @@
               <small>{{ translateEntity(entity.category) }}</small>
             </li>
           </ul>
-          <el-divider />
-          <h3 class="section-title">关系列表</h3>
-          <ul class="chip-list">
-            <li v-for="relation in store.relations" :key="relation.id">
-              <span>{{ relation.source?.label }} → {{ relation.target?.label }}</span>
-              <small>{{ translateRelation(relation.relationType) }}</small>
-            </li>
-          </ul>
         </aside>
         <StatsPanel
           class="analysis-panel"
@@ -68,17 +63,40 @@
       </div>
     </div>
 
+    <!-- 3. 知识图谱与可视化阶段 -->
     <div v-else class="graph-stage">
       <div class="graph-grid">
-        <FilterPanel
-          :navigation-tree="store.navigationTree"
-          :selected-id="store.selectedTextId"
-          :filters="store.filters"
-          :entity-options="store.entityOptions"
-          :relation-options="store.relationOptions"
-          @select:text="store.selectText"
-          @update:filters="handleFilterChange"
-        />
+        <section class="panel left-panel">
+          <div class="property-block">
+            <h3 class="section-title">属性面板</h3>
+            <div class="property">
+              <span>标题</span>
+              <strong>{{ store.selectedText?.title || "请选择文献" }}</strong>
+            </div>
+            <div class="property">
+              <span>类型</span>
+              <strong>{{ labelMap[store.selectedText?.category] || "待识别" }}</strong>
+            </div>
+            <el-divider />
+            <div class="stats-block" v-if="insights">
+              <h4 class="sub-title">统计信息</h4>
+              <ul class="stat-list">
+                <li>实体数：{{ insights.stats?.entityCount || 0 }}</li>
+                <li>关系数：{{ insights.stats?.relationCount || 0 }}</li>
+              </ul>
+            </div>
+          </div>
+          <el-divider />
+          <FilterPanel
+            :filters="store.filters"
+            :show-relation-filters="viewType !== 'historyMap'"
+            :entity-options="store.entityOptions"
+            :relation-options="store.relationOptions"
+            @update:filters="handleFilterChange"
+          />
+        </section>
+        
+        <!-- 中间主要视图 -->
         <section class="panel view-panel">
           <div class="view-toggle">
             <el-radio-group v-model="viewType">
@@ -90,6 +108,7 @@
                 {{ option.label }}
               </el-radio-button>
             </el-radio-group>
+            
             <div class="recommended" v-if="insights?.recommendedViews?.length">
               <span>推荐视图：</span>
               <el-tag v-for="view in insights.recommendedViews" :key="view" size="small">
@@ -97,86 +116,89 @@
               </el-tag>
             </div>
           </div>
-          <component :is="currentComponent" v-bind="viewProps" />
+          
+          <!-- 动态组件渲染 -->
+          <component 
+            :is="currentComponent" 
+            v-bind="viewProps" 
+            :key="store.selectedTextId + '-' + viewType"
+            ref="viewComponentRef"
+          />
         </section>
+        
+        <!-- 右侧实体面板 -->
         <section class="panel right-panel">
-          <h3 class="section-title">属性面板</h3>
-          <div class="property">
-            <span>标题</span>
-            <strong>{{ store.selectedText?.title || "请选择文献" }}</strong>
+          <h3 class="section-title">可用实体</h3>
+          <div v-if="availableEntitiesPanel.length === 0" class="empty-tip">暂无实体</div>
+          <div
+            v-for="entity in availableEntitiesPanel"
+            :key="entity.id"
+            class="entity-item"
+            :class="{ disabled: isEntityMapped(entity.id) }"
+            :draggable="!isEntityMapped(entity.id)"
+            @dragstart="(evt) => startEntityDrag(evt, entity)"
+          >
+            <div class="entity-meta">
+              <span class="dot" :style="{ background: entityColor(entity.category) }"></span>
+              <span class="name">{{ entity.label || entity.name }}</span>
+            </div>
+            <span v-if="isEntityMapped(entity.id)" class="status-tag">已标注</span>
           </div>
-          <div class="property">
-            <span>作者</span>
-            <strong>{{ store.selectedText?.author || "-" }}</strong>
-          </div>
-          <div class="property">
-            <span>时代</span>
-            <strong>{{ store.selectedText?.era || "-" }}</strong>
-          </div>
-          <div class="property">
-            <span>类型</span>
-            <strong>{{ labelMap[store.selectedText?.category] || "待识别" }}</strong>
-          </div>
-          <el-divider />
-          <h3 class="section-title">统计信息</h3>
-          <ul class="stat-list" v-if="insights">
-            <li>实体数：{{ insights.stats?.entityCount || 0 }}</li>
-            <li>关系数：{{ insights.stats?.relationCount || 0 }}</li>
-            <li>句读完成度：{{ Math.round((insights.stats?.punctuationProgress || 0) * 100) }}%</li>
-          </ul>
-          <el-divider />
-          <h3 class="section-title">分析结果</h3>
-          <p class="analysis">{{ insights?.analysisSummary }}</p>
         </section>
       </div>
     </div>
-  <el-dialog v-model="searchDialogVisible" title="搜索结果" width="520px">
-    <el-table :data="store.searchResults" v-loading="store.searchLoading" size="small">
-      <el-table-column prop="title" label="标题" />
-      <el-table-column prop="author" label="作者" width="120" />
-      <el-table-column label="操作" width="120">
-        <template #default="scope">
-          <el-button size="small" type="primary" @click="selectFromSearch(scope.row.id)">查看</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <template #footer>
-      <el-button @click="searchDialogVisible = false">关闭</el-button>
-    </template>
-  </el-dialog>
+    
+    <!-- 搜索弹窗 -->
+    <el-dialog v-model="searchDialogVisible" title="搜索结果" width="520px">
+      <el-table :data="store.searchResults" v-loading="store.searchLoading" size="small">
+        <el-table-column prop="title" label="标题" />
+        <el-table-column label="操作" width="120">
+          <template #default="scope">
+            <el-button size="small" type="primary" @click="selectFromSearch(scope.row.id)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
 import { ArrowDown } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
+
+// 引入组件
 import FilterPanel from "@/components/filters/FilterPanel.vue";
 import GraphView from "@/components/visualizations/GraphView.vue";
 import TimelineView from "@/components/visualizations/TimelineView.vue";
 import MapView from "@/components/visualizations/MapView.vue";
 import StatsPanel from "@/components/visualizations/StatsPanel.vue";
-import WordCloudCanvas from "@/components/visualizations/WordCloudCanvas.vue";
-import TextUploadDrawer from "@/components/layout/TextUploadDrawer.vue";
 import ClassificationBanner from "@/components/layout/ClassificationBanner.vue";
 import FamilyTreeView from "@/components/visualizations/FamilyTreeView.vue";
 import BattleTimelineView from "@/components/visualizations/BattleTimelineView.vue";
 import TextWorkspace from "./TextWorkspace.vue";
+import WordCloudCanvas from "@/components/visualizations/WordCloudCanvas.vue";
+import HistoryMap from "@/components/visualizations/HistoryMap.vue";
 
 const router = useRouter();
 const route = useRoute();
 const store = useTextStore();
 const authStore = useAuthStore();
-const viewType = ref("graph");
-const stage = ref("structure");
+
+const STORAGE_STAGE_KEY = "dashboard-stage";
+const STORAGE_VIEW_KEY = "dashboard-view";
+const STORAGE_VIEW_PER_TEXT_KEY = "dashboard-view-per-text";
+
+const stage = ref(localStorage.getItem(STORAGE_STAGE_KEY) || "structure");
+const viewType = ref(localStorage.getItem(STORAGE_VIEW_KEY) || "graph");
 const searchDialogVisible = ref(false);
+const viewComponentRef = ref(null);
 
 const handleLogout = () => {
   authStore.logout();
-  ElMessage.success("已退出登录");
   router.push("/");
 };
 
@@ -205,91 +227,84 @@ onMounted(async () => {
   }
 });
 
-watch(
-  () => route.params.id,
-  async (id) => {
-    if (id) {
-      await store.selectText(id);
+watch(() => route.params.id, async (id) => {
+  if (id) await store.selectText(id);
+});
+
+// 选中文本后，确保当前视图合法且不抢占已有选择
+watch(() => store.selectedText?.id, async (newId) => {
+  if (newId) {
+    await nextTick();
+    const opts = viewOptions.value;
+    const perTextViews = JSON.parse(localStorage.getItem(STORAGE_VIEW_PER_TEXT_KEY) || "{}");
+    const savedForText = perTextViews[String(newId)];
+    if (savedForText && opts.some((o) => o.value === savedForText)) {
+      viewType.value = savedForText;
+      return;
+    }
+    if (opts.length && !opts.some((o) => o.value === viewType.value)) {
+      viewType.value = opts[0].value;
     }
   }
-);
-
-watch(
-  () => store.searchVersion,
-  (value) => {
-    if (value > 0) {
-      searchDialogVisible.value = true;
-    }
-  }
-);
-
-const insights = computed(() => store.insights);
+});
 
 const viewPresets = {
   travelogue: [
     { value: "map", label: "地图轨迹" },
-    { value: "timeline", label: "行程时间线" },
+    { value: "timeline", label: "行程时间轴" },
     { value: "graph", label: "知识图谱" }
   ],
   warfare: [
-    { value: "battle", label: "对抗视图" },
-    { value: "timeline", label: "战事时间线" },
+    { value: "historyMap", label: "战争地图" }, 
     { value: "graph", label: "知识图谱" }
   ],
   biography: [
-    { value: "family", label: "亲情树" },
-    { value: "timeline", label: "生平时间线" },
+    { value: "family", label: "亲情图" },
+    { value: "timeline", label: "生平时间轴" },
     { value: "graph", label: "知识图谱" }
   ],
   default: [
     { value: "graph", label: "知识图谱" },
-    { value: "timeline", label: "时间线" },
+    { value: "timeline", label: "时间轴" },
     { value: "map", label: "地图" }
   ]
 };
 
 const viewOptions = computed(() => {
   const category = store.selectedText?.category;
-  if (category && viewPresets[category]) {
-    return viewPresets[category];
-  }
-  return viewPresets.default;
+  return (category && viewPresets[category]) ? viewPresets[category] : viewPresets.default;
 });
 
-watch(
-  () => store.selectedText?.category,
-  () => {
-    const options = viewOptions.value;
-    if (!options.find((opt) => opt.value === viewType.value)) {
-      viewType.value = options[0]?.value || "graph";
-    }
-  },
-  { immediate: true }
-);
+// 如果存储的视图不在当前列表中，回退到第一个
+watch(viewOptions, (opts) => {
+  if (!opts.length) return;
+  if (!opts.some((o) => o.value === viewType.value)) {
+    viewType.value = opts[0].value;
+  }
+}, { immediate: true });
 
 const componentMap = {
   graph: GraphView,
   timeline: TimelineView,
   map: MapView,
+  historyMap: HistoryMap,
   family: FamilyTreeView,
   battle: BattleTimelineView,
   cloud: WordCloudCanvas
 };
 
 const currentComponent = computed(() => componentMap[viewType.value] || GraphView);
+const insights = computed(() => store.insights);
 
 const viewProps = computed(() => {
   switch (viewType.value) {
-    case "cloud":
-      return { words: insights.value?.wordCloud || [] };
-    case "timeline":
-      return { milestones: insights.value?.timeline || [] };
-    case "map":
-      return { points: insights.value?.mapPoints || [] };
-    case "battle":
-      return { events: insights.value?.battleTimeline || [] };
-    case "family":
-      return { nodes: insights.value?.familyTree || [] };
+    case "historyMap":
+      return { availableEntities: store.entities || [], hideSidebar: true, activeCategories: store.filters.entityCategories };
+    case "cloud": return { words: insights.value?.wordCloud || [] };
+    case "timeline": return { milestones: insights.value?.timeline || [] };
+    case "map": return { points: insights.value?.mapPoints || [] };
+    case "battle": return { events: insights.value?.battleTimeline || [] };
+    case "family": return { nodes: insights.value?.familyTree || [] };
     case "graph":
     default:
       return {
@@ -313,179 +328,77 @@ const selectFromSearch = async (textId) => {
   await store.selectText(textId);
 };
 
-const translateEntity = (category) => {
-  const map = {
-    PERSON: "人物",
-    LOCATION: "地点",
-    EVENT: "事件",
-    ORGANIZATION: "组织",
-    OBJECT: "器物",
-    CUSTOM: "自定义"
-  };
-  return map[category] || category;
+const translateEntity = (cat) => cat === "PERSON" ? "人物" : cat;
+
+// 刷新后保持在当前阶段/视图
+watch(stage, (val) => localStorage.setItem(STORAGE_STAGE_KEY, val));
+watch(viewType, (val) => {
+  localStorage.setItem(STORAGE_VIEW_KEY, val);
+  if (store.selectedTextId) {
+    const perTextViews = JSON.parse(localStorage.getItem(STORAGE_VIEW_PER_TEXT_KEY) || "{}");
+    perTextViews[String(store.selectedTextId)] = val;
+    localStorage.setItem(STORAGE_VIEW_PER_TEXT_KEY, JSON.stringify(perTextViews));
+  }
+});
+
+// 将可用实体列表移到右侧面板
+const availableEntitiesPanel = computed(() => {
+  if (viewType.value === "historyMap") {
+    const fromChild = viewComponentRef.value?.sidebarEntities?.value;
+    if (fromChild && Array.isArray(fromChild)) {
+      return fromChild;
+    }
+    return store.entities || [];
+  }
+  if (viewType.value === "graph") {
+    return store.entities || [];
+  }
+  return [];
+});
+
+const isEntityMapped = (id) => {
+  if (viewType.value !== "historyMap") return false;
+  return viewComponentRef.value?.isEntityMapped?.(id) || false;
 };
 
-const translateRelation = (type) => {
-  const map = {
-    CONFLICT: "对抗",
-    SUPPORT: "结盟",
-    TRAVEL: "行旅",
-    FAMILY: "亲属",
-    TEMPORAL: "时间",
-    CUSTOM: "自定义"
-  };
-  return map[type] || type;
+const startEntityDrag = (evt, entity) => {
+  if (viewType.value !== "historyMap") return;
+  viewComponentRef.value?.onDragStart?.(evt, entity);
+};
+
+const entityColor = (category) => {
+  if (viewType.value !== "historyMap") return "#95a5a6";
+  return viewComponentRef.value?.getEntityColor?.(category) || "#95a5a6";
 };
 </script>
 
 <style scoped>
-.dashboard-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 0px;
-}
-
-.stage-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.stage-nav {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 0;
-  margin-bottom: 4px;
-
-}
-
-.stage-btn {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 18px;
-  background: white;
-  color: var(--muted);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.stage-btn.active {
-  background: #3f3d56;
-  color: #fff;
-}
-
-.stage-btn .icon {
-  font-size: 16px;
-}
-
-.analysis-stage .analysis-body {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 16px;
-}
-
-.analysis-panel {
-  min-height: 360px;
-}
-
-.insight-panel {
-  min-height: 360px;
-}
-
-.chip-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.chip-list li {
-  display: flex;
-  justify-content: space-between;
-  background: rgba(247, 244, 236, 0.9);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: #5f5750;
-}
-
-.graph-stage .graph-grid {
-  display: grid;
-  grid-template-columns: 280px 1fr 320px;
-  gap: 16px;
-  min-height: 560px;
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
-}
-
-.view-panel {
-  min-height: 520px;
-}
-
-.right-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.property {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.analysis {
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.stat-list {
-  list-style: none;
-  padding-left: 0;
-  color: var(--muted);
-}
-
-.view-toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.recommended {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.user-menu {
-  margin-left: auto;
-}
-
-.user-info {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-radius: 6px;
-  transition: background-color 0.3s;
-}
-
-.user-info:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-}
+.dashboard-shell { display: flex; flex-direction: column; gap: 8px; }
+.stage-actions { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 4px; }
+.stage-nav { display: flex; gap: 12px; margin-bottom: 4px; }
+.stage-btn { padding: 8px 18px; border-radius: 999px; border: 1px solid var(--border); background: white; cursor: pointer; display: flex; gap: 6px; align-items: center;}
+.stage-btn.active { background: #3f3d56; color: white; }
+.graph-stage .graph-grid { display: grid; grid-template-columns: 300px 1fr 300px; gap: 16px; min-height: 560px; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+.view-panel { min-height: 520px; }
+.left-panel { display: flex; flex-direction: column; gap: 14px; padding: 0; border: none; background: transparent; box-shadow: none; }
+.property-block { background: linear-gradient(180deg, #fffaf1 0%, #fff 80%); border: 1px solid #eadfce; border-radius: 16px; padding: 14px 16px; box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08); }
+.left-panel :deep(.filter-panel) { border: 1px solid #eadfce; background: linear-gradient(180deg, #fffaf1 0%, #fff 80%); box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08); }
+.view-toggle { display: flex; justify-content: space-between; margin-bottom: 12px; }
+.analysis-stage .analysis-body { display: grid; grid-template-columns: 260px 1fr; gap: 16px; }
+.chip-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.chip-list li { display: flex; justify-content: space-between; background: rgba(247,244,236,0.9); padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+.right-panel { display: flex; flex-direction: column; gap: 12px; }
+.property { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.property span { color: var(--muted); }
+.stats-block { margin-top: 4px; }
+.sub-title { margin: 0 0 8px; font-size: 14px; color: #8c7a6b; }
+.stat-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; color: #4a443e; }
+.entity-panel { display: flex; flex-direction: column; gap: 8px; }
+.entity-item { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; cursor: grab; }
+.entity-item.disabled { background: #f5f5f5; color: #999; cursor: not-allowed; }
+.entity-meta { display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.empty-tip { color: var(--muted); }
+.status-tag { font-size: 12px; color: #67c23a; background: #e1f3d8; padding: 2px 6px; border-radius: 6px; }
 </style>

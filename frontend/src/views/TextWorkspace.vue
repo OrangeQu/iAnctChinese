@@ -6,8 +6,17 @@
           <h3 class="section-title">原文</h3>
           <el-button link @click="goBackToDocuments">返回文档管理</el-button>
         </div>
-        <EditorContent v-if="editor" :editor="editor" class="text-editor" />
-        <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文本</p>
+        <QuillEditor
+          v-if="store.selectedText"
+          :content="editableContent"
+          @update:content="(val) => editableContent = val"
+          class="text-editor"
+          theme="snow"
+          content-type="text"
+          :read-only="savingContent"
+          @blur="handleContentSave"
+        />
+        <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文章</p>
         <el-divider />
         <div class="action-row">
           <el-select

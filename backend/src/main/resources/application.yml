@@ -4,7 +4,19 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  # --- 新增配置：允许启动时运行 data.sql 插入数据 ---
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+  # -----------------------------------------------
+
   jpa:
+    # --- 新增配置：延迟数据初始化，确保表创建后再插入数据 ---
+    defer-datasource-initialization: true
+    # -----------------------------------------------
+    
     hibernate:
       ddl-auto: update
     properties:
@@ -13,6 +25,7 @@ spring:
         format_sql: true
     show-sql: true
     database-platform: org.hibernate.dialect.MySQLDialect
+  
   jackson:
     default-property-inclusion: non_null
 
@@ -37,5 +50,3 @@ logging:
 siliconflow:
   api-key: sk-rozyqiofobetxzpozmiqfxnwemhvpxvotndkbugnrkaurcwj
   default-model: deepseek-ai/DeepSeek-V3
-
-
