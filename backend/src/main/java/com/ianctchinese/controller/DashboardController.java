@@ -3,6 +3,8 @@ package com.ianctchinese.controller;
 import com.ianctchinese.repository.EntityAnnotationRepository;
 import com.ianctchinese.repository.RelationAnnotationRepository;
 import com.ianctchinese.repository.TextDocumentRepository;
+import com.ianctchinese.repository.ModelJobRepository;
+import com.ianctchinese.dto.AdminDashboardResponse;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ public class DashboardController {
   private final TextDocumentRepository textDocumentRepository;
   private final EntityAnnotationRepository entityAnnotationRepository;
   private final RelationAnnotationRepository relationAnnotationRepository;
+  private final ModelJobRepository modelJobRepository;
 
   @GetMapping("/overview")
   public ResponseEntity<Map<String, Object>> overview(@RequestParam("textId") Long textId) {
@@ -29,5 +32,17 @@ public class DashboardController {
     overview.put("relationCount", relationAnnotationRepository.findByTextDocumentId(textId).size());
     overview.put("status", "READY");
     return ResponseEntity.ok(overview);
+  }
+
+  @GetMapping("/admin-overview")
+  public ResponseEntity<AdminDashboardResponse> adminOverview() {
+    AdminDashboardResponse response = AdminDashboardResponse.builder()
+        .textCount(textDocumentRepository.count())
+        .entityCount(entityAnnotationRepository.count())
+        .relationCount(relationAnnotationRepository.count())
+        .modelJobCount(modelJobRepository.count())
+        .recentJobs(modelJobRepository.findTop5ByOrderByCreatedAtDesc())
+        .build();
+    return ResponseEntity.ok(response);
   }
 }

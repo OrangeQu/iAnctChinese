@@ -5,6 +5,7 @@ import com.ianctchinese.model.ModelJob;
 import com.ianctchinese.service.ModelJobService;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +28,10 @@ public class ModelJobController {
   }
 
   @GetMapping
-  public ResponseEntity<List<ModelJob>> listJobs(@RequestParam("textId") Long textId) {
-    return ResponseEntity.ok(modelJobService.listJobs(textId));
+  public ResponseEntity<List<ModelJob>> listJobs(@RequestParam(value = "textId", required = false) Long textId) {
+    if (textId != null) {
+      return ResponseEntity.ok(modelJobService.listJobs(textId));
+    }
+    return ResponseEntity.ok(modelJobService.listAllJobs());
   }
 }

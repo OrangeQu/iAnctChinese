@@ -1,0 +1,36 @@
+:root {
+  --brand: #1f3349;
+  --brand-accent: #5e8dff;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --text: #1c1c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100vh;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(17, 38, 146, 0.06);
+}
