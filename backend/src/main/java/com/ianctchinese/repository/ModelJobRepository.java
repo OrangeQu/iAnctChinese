@@ -9,4 +9,8 @@ public interface ModelJobRepository extends JpaRepository<ModelJob, Long> {
   List<ModelJob> findByTextId(Long textId);
 
   void deleteByTextId(Long textId);
+
+  List<ModelJob> findTop5ByOrderByCreatedAtDesc();
+
+  List<ModelJob> findAllByOrderByCreatedAtDesc();
 }

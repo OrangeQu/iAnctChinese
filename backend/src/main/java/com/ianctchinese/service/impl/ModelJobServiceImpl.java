@@ -5,6 +5,7 @@ import com.ianctchinese.llm.LargeLanguageModelClient;
 import com.ianctchinese.llm.ModelJobResult;
 import com.ianctchinese.model.ModelJob;
 import com.ianctchinese.model.ModelJob.JobStatus;
+import com.ianctchinese.model.ModelJob.JobType;
 import com.ianctchinese.repository.ModelJobRepository;
 import com.ianctchinese.service.ModelJobService;
 import java.time.LocalDateTime;
@@ -54,5 +55,25 @@ public class ModelJobServiceImpl implements ModelJobService {
   @Override
   public List<ModelJob> listJobs(Long textId) {
     return modelJobRepository.findByTextId(textId);
+  }
+
+  @Override
+  public List<ModelJob> listAllJobs() {
+    return modelJobRepository.findAllByOrderByCreatedAtDesc();
+  }
+
+  @Override
+  @Transactional
+  public ModelJob recordJob(Long textId, JobType jobType, JobStatus status, String payload, String resultData) {
+    ModelJob job = ModelJob.builder()
+        .textId(textId)
+        .jobType(jobType)
+        .status(status)
+        .payload(payload)
+        .resultData(resultData)
+        .createdAt(LocalDateTime.now())
+        .completedAt(LocalDateTime.now())
+        .build();
+    return modelJobRepository.save(job);
   }
 }
