@@ -68,8 +68,9 @@ public class SecurityConfig {
         // ❌ 删除原来的通配符写法
         // configuration.setAllowedOriginPatterns(List.of("*"));
         
-        // ✅ 改为明确指定前端地址 (注意不要带最后的斜杠)
+        // ✅ 改为明确指定前端地址 (注意不要带最后的斜杠)，覆盖 localhost/127.0.0.1，并兜底通配符 pattern
         configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedOriginPatterns(null);
         
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

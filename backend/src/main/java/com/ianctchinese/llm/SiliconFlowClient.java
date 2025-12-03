@@ -52,11 +52,12 @@ public class SiliconFlowClient {
   }
 
   public ClassificationPayload classifyText(String textContent, String modelName) {
-    String systemPrompt = "你是一名古汉语文本分类助手，需要根据输入文本判断其属于战争纪实（warfare）、游记地理（travelogue）、人物传记（biography）或其他类型（other）。";
+    String systemPrompt =
+        "You are a classical-Chinese text classifier. Decide whether the text is warfare, travelogue, biography, or other.";
     String userPrompt = """
-        请只输出 JSON，格式如下：
-        {"category":"warfare|travelogue|biography|other","confidence":0-1,"reasons":["原因1","原因2"]}
-        文本：
+        Please return ONLY JSON:
+        {"category":"warfare|travelogue|biography|other","confidence":0-1,"reasons":["reason1","reason2"]}
+        Text:
         %s
         """.formatted(textContent);
     try {
@@ -66,7 +67,7 @@ public class SiliconFlowClient {
       }
       List<String> reasons = new ArrayList<>();
       if (node.has("reasons") && node.get("reasons").isArray()) {
-        node.get("reasons").forEach(reason -> reasons.add(reason.asText("模型判断依据")));
+        node.get("reasons").forEach(reason -> reasons.add(reason.asText("model reasoning")));
       }
       return ClassificationPayload.builder()
           .category(node.path("category").asText("unknown"))
@@ -80,21 +81,35 @@ public class SiliconFlowClient {
   }
 
   public AnnotationPayload annotateText(String textContent, String modelName) {
-    String systemPrompt = "你是一名古籍标注助手，需要同时完成实体抽取、关系抽取、句读建议及词频统计。"
-        + "实体类别仅使用：PERSON(人物)、LOCATION(地点)、EVENT(事件)、ORGANIZATION(组织/朝廷/部队)、OBJECT(器物/文献)、CUSTOM(其他)。"
-        + "关系类型仅使用：FAMILY(亲属)、ALLY(结盟/支持)、RIVAL(对抗/敌对)、MENTOR(师承/同门)、INFLUENCE(影响/启发)、LOCATION_OF(所在)、PART_OF(隶属)、CAUSE(因果)、CUSTOM(其他)。"
-        + "要求：至少输出8-12个实体，并保证 label 可读；至少输出5-8条关系，覆盖人物/地点/事件间的联系，关系的 sourceLabel/targetLabel 必须存在于 entities.label。"
-        + "词云词条请输出8-12个短词（2-6字），weight 0.3-1，避免整句。句读建议提供3-6条 original/punctuated/summary。"
-        + "JSON 必须严格闭合。若偏移难以确定，可用0-0占位。";
+    String systemPrompt = """
+        You are a classical-Chinese IE assistant. First infer the coarse genre (warfare / travelogue / biography / essay-or-other) and then emphasize the corresponding schema, but output entities/relations ONLY with these categories:
+        Entities: PERSON, LOCATION, EVENT, ORGANIZATION, OBJECT, CUSTOM.
+        Relations: FAMILY, ALLY, RIVAL, MENTOR, INFLUENCE, LOCATION_OF, PART_OF, CAUSE, CUSTOM.
+
+        Genre emphasis (guide the model to extract more, without changing categories):
+        - warfare: prioritize battles, marches, sieges, commanders, armies, strongholds, decrees, alliances. Extract more relations of RIVAL/ALLY/PART_OF/LOCATION_OF/COMMAND-like (map to existing types).
+        - travelogue: prioritize routes, places visited, landmarks, scenery, guides/hosts; relations of ROUTE/LOCATION_OF/DESCRIBES (map to LOCATION_OF/INFLUENCE).
+        - biography: prioritize offices/appointments, patrons, rivals, praise/criticism, major life events; relations of MENTOR/FAMILY/ALLY/RIVAL/INFLUENCE/PART_OF/LOCATION_OF.
+        - essay/misc: prioritize key people/places/events mentioned, analogies, causes; relations of CAUSE/INFLUENCE/DESCRIBES mapped to available types.
+
+        Requirements:
+        1) Every entity must include startOffset/endOffset (UTF-8 character index into the original text). If you cannot locate a span, DO NOT return that entity.
+        2) Prefer specific categories; use CUSTOM only when none fits.
+        3) Aim for >=12 entities and >=8 relations if the text allows; relations must reference existing entity labels, do not invent labels.
+        4) Labels concise (<=10 chars), confidence 0-1.
+        5) WordCloud: 12 short tokens (2-6 chars), weight 0.3-1, no full sentences.
+        6) Sentences: 6 suggestions with original/punctuated/summary.
+        Return STRICT JSON. If unsure of offset, drop the item.
+        """;
     String userPrompt = """
-        请只输出 JSON，格式如下：
+        Output ONLY JSON in this shape:
         {
           "entities":[{"label":"","category":"PERSON|LOCATION|EVENT|ORGANIZATION|OBJECT|CUSTOM","startOffset":0,"endOffset":0,"confidence":0.8}],
           "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|RIVAL|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|CUSTOM","confidence":0.7,"description":""}],
           "sentences":[{"original":"","punctuated":"","summary":""}],
           "wordCloud":[{"label":"","weight":0.8}]
         }
-        文本：
+        Text:
         %s
         """.formatted(textContent);
     try {
@@ -103,7 +118,7 @@ public class SiliconFlowClient {
         return AnnotationPayload.builder().build();
       }
       List<AnnotationEntity> entities = new ArrayList<>();
-      if (node.has("entities")) {
+      if (node.has("entities") && node.get("entities").isArray()) {
         node.get("entities").forEach(item -> entities.add(
             AnnotationEntity.builder()
                 .label(item.path("label").asText())
@@ -114,18 +129,23 @@ public class SiliconFlowClient {
                 .build()));
       }
       List<AnnotationRelation> relations = new ArrayList<>();
-      if (node.has("relations")) {
+      if (node.has("relations") && node.get("relations").isArray()) {
         node.get("relations").forEach(item -> relations.add(
             AnnotationRelation.builder()
                 .sourceLabel(item.path("sourceLabel").asText())
                 .targetLabel(item.path("targetLabel").asText())
-                .relationType(item.path("relationType").asText("CUSTOM"))
+                // 兼容模型可能返回的 type/RelationType 字段，缺省时默认 CUSTOM
+                .relationType(
+                    item.hasNonNull("relationType")
+                        ? item.path("relationType").asText("CUSTOM")
+                        : item.path("type").asText("CUSTOM")
+                )
                 .confidence(item.path("confidence").asDouble(0.6))
                 .description(item.path("description").asText(""))
                 .build()));
       }
       List<SentenceSuggestion> sentences = new ArrayList<>();
-      if (node.has("sentences")) {
+      if (node.has("sentences") && node.get("sentences").isArray()) {
         node.get("sentences").forEach(item -> sentences.add(
             SentenceSuggestion.builder()
                 .original(item.path("original").asText())
@@ -134,7 +154,7 @@ public class SiliconFlowClient {
                 .build()));
       }
       List<WordCloudItem> wordCloudItems = new ArrayList<>();
-      if (node.has("wordCloud")) {
+      if (node.has("wordCloud") && node.get("wordCloud").isArray()) {
         node.get("wordCloud").forEach(item -> wordCloudItems.add(
             WordCloudItem.builder()
                 .label(item.path("label").asText())
@@ -157,7 +177,7 @@ public class SiliconFlowClient {
     return ClassificationPayload.builder()
         .category("unknown")
         .confidence(0.5)
-        .reasons(Collections.singletonList("使用本地启发式判断"))
+        .reasons(Collections.singletonList("fallback"))
         .build();
   }
 
@@ -177,7 +197,7 @@ public class SiliconFlowClient {
               new Message("user", userPrompt)
           ),
           0.2,
-          2048
+          4096
       );
     }
   }
@@ -226,7 +246,7 @@ public class SiliconFlowClient {
     if (response.getBody() == null
         || response.getBody().getChoices() == null
         || response.getBody().getChoices().isEmpty()) {
-      log.warn("SiliconFlow 无返回内容，status={}", response.getStatusCode());
+      log.warn("SiliconFlow empty response, status={}", response.getStatusCode());
       return null;
     }
     String content = response.getBody().getChoices().get(0).getMessage().content();
@@ -243,4 +263,3 @@ public class SiliconFlowClient {
     return objectMapper.readTree(json);
   }
 }
-
