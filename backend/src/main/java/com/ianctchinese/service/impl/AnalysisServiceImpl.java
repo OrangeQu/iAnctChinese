@@ -159,6 +159,51 @@ public class AnalysisServiceImpl implements AnalysisService {
   @Override
   @Transactional
   public ModelAnalysisResponse runFullAnalysis(Long textId, String model) {
+    try {
+      return doRunFullAnalysis(textId, model);
+    } catch (Exception ex) {
+      // 防御性降级：LLM 失败或超时时，回退到启发式结果，避免前端看到整体失败。
+      TextDocument document = loadText(textId);
+      ClassificationPayload clsPayload = heuristicClassify(document.getContent());
+      document.setCategory(normalizeCategory(clsPayload.getCategory(), document.getCategory()));
+      textDocumentRepository.save(document);
+
+      List<AnnotationEntity> fallbackEntities = buildHeuristicEntities(document.getContent());
+      List<RelationAnnotation> relations = saveHeuristicRelations(document,
+          saveEntities(document, fallbackEntities));
+
+      if (relations.isEmpty()) {
+        relations = relationAnnotationRepository.findByTextDocumentId(textId);
+      }
+
+      textSectionService.autoSegment(textId);
+
+      ClassificationResponse classification = ClassificationResponse.builder()
+          .textId(textId)
+          .suggestedCategory(document.getCategory())
+          .confidence(clsPayload.getConfidence())
+          .reasons(clsPayload.getReasons())
+          .build();
+
+      AutoAnnotationResponse annotation = AutoAnnotationResponse.builder()
+          .textId(textId)
+          .createdEntities(fallbackEntities.size())
+          .createdRelations(relations.size())
+          .message("LLM 失败，已返回启发式结果")
+          .build();
+
+      TextInsightsResponse insights = buildInsights(textId);
+      List<TextSection> sections = textSectionRepository.findByTextDocumentId(textId);
+      return ModelAnalysisResponse.builder()
+          .classification(classification)
+          .annotation(annotation)
+          .insights(insights)
+          .sections(sections)
+          .build();
+    }
+  }
+
+  private ModelAnalysisResponse doRunFullAnalysis(Long textId, String model) {
     TextDocument document = loadText(textId);
     ClassificationPayload clsPayload = classifyWithFallback(document.getContent(), model);
     String normalizedCategory = normalizeCategory(clsPayload.getCategory(), document.getCategory());
@@ -403,11 +448,18 @@ public class AnalysisServiceImpl implements AnalysisService {
       return RelationType.CUSTOM;
     }
     return switch (relationType.toUpperCase(Locale.ROOT)) {
-      case "CONFLICT" -> RelationType.CONFLICT;
+      case "ALLY" -> RelationType.ALLY;
       case "SUPPORT" -> RelationType.SUPPORT;
-      case "TRAVEL" -> RelationType.TRAVEL;
+      case "RIVAL" -> RelationType.RIVAL;
+      case "CONFLICT" -> RelationType.CONFLICT;
       case "FAMILY" -> RelationType.FAMILY;
+      case "MENTOR" -> RelationType.MENTOR;
+      case "INFLUENCE" -> RelationType.INFLUENCE;
+      case "LOCATION_OF" -> RelationType.LOCATION_OF;
+      case "PART_OF" -> RelationType.PART_OF;
+      case "CAUSE" -> RelationType.CAUSE;
       case "TEMPORAL" -> RelationType.TEMPORAL;
+      case "TRAVEL" -> RelationType.TRAVEL;
       default -> RelationType.CUSTOM;
     };
   }

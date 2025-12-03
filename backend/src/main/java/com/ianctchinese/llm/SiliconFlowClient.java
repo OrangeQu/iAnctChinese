@@ -84,7 +84,7 @@ public class SiliconFlowClient {
     String systemPrompt = """
         You are a classical-Chinese IE assistant. First infer the coarse genre (warfare / travelogue / biography / essay-or-other) and then emphasize the corresponding schema, but output entities/relations ONLY with these categories:
         Entities: PERSON, LOCATION, EVENT, ORGANIZATION, OBJECT, CUSTOM.
-        Relations: FAMILY, ALLY, RIVAL, MENTOR, INFLUENCE, LOCATION_OF, PART_OF, CAUSE, CUSTOM.
+        Relations: FAMILY, ALLY, SUPPORT, RIVAL, CONFLICT, MENTOR, INFLUENCE, LOCATION_OF, PART_OF, CAUSE, TEMPORAL, TRAVEL, CUSTOM.
 
         Genre emphasis (guide the model to extract more, without changing categories):
         - warfare: prioritize battles, marches, sieges, commanders, armies, strongholds, decrees, alliances. Extract more relations of RIVAL/ALLY/PART_OF/LOCATION_OF/COMMAND-like (map to existing types).
@@ -105,7 +105,7 @@ public class SiliconFlowClient {
         Output ONLY JSON in this shape:
         {
           "entities":[{"label":"","category":"PERSON|LOCATION|EVENT|ORGANIZATION|OBJECT|CUSTOM","startOffset":0,"endOffset":0,"confidence":0.8}],
-          "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|RIVAL|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|CUSTOM","confidence":0.7,"description":""}],
+          "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|SUPPORT|RIVAL|CONFLICT|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|TEMPORAL|TRAVEL|CUSTOM","confidence":0.7,"description":""}],
           "sentences":[{"original":"","punctuated":"","summary":""}],
           "wordCloud":[{"label":"","weight":0.8}]
         }
