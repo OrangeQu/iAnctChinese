@@ -353,27 +353,68 @@ const relationOptions = computed(() => {
   const all = [
     { label: "亲属", value: "FAMILY" },
     { label: "结盟/支持", value: "ALLY" },
+    { label: "援助/支援", value: "SUPPORT" },
     { label: "对抗/敌对", value: "RIVAL" },
+    { label: "冲突/对立", value: "CONFLICT" },
     { label: "师承/同门", value: "MENTOR" },
     { label: "影响/启发", value: "INFLUENCE" },
     { label: "所在", value: "LOCATION_OF" },
     { label: "隶属", value: "PART_OF" },
     { label: "因果", value: "CAUSE" },
+    { label: "时间/时序", value: "TEMPORAL" },
+    { label: "行旅/路线", value: "TRAVEL" },
     { label: "其他", value: "CUSTOM" }
   ];
   if (cat.includes("warfare")) {
     return all.filter((i) =>
-      ["ALLY", "RIVAL", "PART_OF", "LOCATION_OF", "CAUSE", "INFLUENCE", "FAMILY", "CUSTOM"].includes(i.value)
+      [
+        "ALLY",
+        "SUPPORT",
+        "RIVAL",
+        "CONFLICT",
+        "PART_OF",
+        "LOCATION_OF",
+        "CAUSE",
+        "INFLUENCE",
+        "FAMILY",
+        "TEMPORAL",
+        "TRAVEL",
+        "CUSTOM"
+      ].includes(i.value)
     );
   }
   if (cat.includes("travel")) {
     return all.filter((i) =>
-      ["LOCATION_OF", "PART_OF", "INFLUENCE", "ALLY", "RIVAL", "CAUSE", "CUSTOM"].includes(i.value)
+      [
+        "LOCATION_OF",
+        "PART_OF",
+        "TRAVEL",
+        "TEMPORAL",
+        "INFLUENCE",
+        "ALLY",
+        "SUPPORT",
+        "RIVAL",
+        "CAUSE",
+        "CUSTOM"
+      ].includes(i.value)
     );
   }
   if (cat.includes("biography")) {
     return all.filter((i) =>
-      ["FAMILY", "MENTOR", "ALLY", "RIVAL", "PART_OF", "LOCATION_OF", "INFLUENCE", "CAUSE", "CUSTOM"].includes(i.value)
+      [
+        "FAMILY",
+        "MENTOR",
+        "ALLY",
+        "SUPPORT",
+        "RIVAL",
+        "CONFLICT",
+        "PART_OF",
+        "LOCATION_OF",
+        "INFLUENCE",
+        "CAUSE",
+        "TEMPORAL",
+        "CUSTOM"
+      ].includes(i.value)
     );
   }
   return all;
