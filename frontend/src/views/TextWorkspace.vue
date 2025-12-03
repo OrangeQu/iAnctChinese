@@ -135,12 +135,13 @@
               </el-select>
             </el-form-item>
             <el-form-item label="关系">
-              <el-select v-model="relationForm.relationType" placeholder="关系类型" style="width: 100px">
-                <el-option label="对抗" value="CONFLICT" />
-                <el-option label="结盟" value="SUPPORT" />
-                <el-option label="行旅" value="TRAVEL" />
-                <el-option label="亲属" value="FAMILY" />
-                <el-option label="时间" value="TEMPORAL" />
+              <el-select v-model="relationForm.relationType" placeholder="关系类型" style="width: 120px">
+                <el-option
+                  v-for="opt in relationOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -149,7 +150,11 @@
           </el-form>
           <el-table :data="activeRelations" border size="small" height="200">
             <el-table-column prop="source.label" label="实体A" />
-            <el-table-column prop="relationType" label="关系类型" />
+            <el-table-column label="关系类型">
+              <template #default="{ row }">
+                {{ translateRelationLabel(row.relationType || row.type) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="target.label" label="实体B" />
             <el-table-column prop="confidence" label="置信度" />
           </el-table>
@@ -321,7 +326,7 @@ const entityForm = reactive({
 const relationForm = reactive({
   sourceEntityId: null,
   targetEntityId: null,
-  relationType: "CONFLICT"
+  relationType: "ALLY"
 });
 
 const appliedContentSignature = ref("");
@@ -337,6 +342,41 @@ const activeRelations = computed(() => {
       String(r.sourceEntityId || r.source?.id) === targetId ||
       String(r.targetEntityId || r.target?.id) === targetId
   );
+});
+
+const activeTextCategory = computed(() => {
+  return store.classification?.suggestedCategory || store.selectedText?.category || "other";
+});
+
+const relationOptions = computed(() => {
+  const cat = (activeTextCategory.value || "").toLowerCase();
+  const all = [
+    { label: "亲属", value: "FAMILY" },
+    { label: "结盟/支持", value: "ALLY" },
+    { label: "对抗/敌对", value: "RIVAL" },
+    { label: "师承/同门", value: "MENTOR" },
+    { label: "影响/启发", value: "INFLUENCE" },
+    { label: "所在", value: "LOCATION_OF" },
+    { label: "隶属", value: "PART_OF" },
+    { label: "因果", value: "CAUSE" },
+    { label: "其他", value: "CUSTOM" }
+  ];
+  if (cat.includes("warfare")) {
+    return all.filter((i) =>
+      ["ALLY", "RIVAL", "PART_OF", "LOCATION_OF", "CAUSE", "INFLUENCE", "FAMILY", "CUSTOM"].includes(i.value)
+    );
+  }
+  if (cat.includes("travel")) {
+    return all.filter((i) =>
+      ["LOCATION_OF", "PART_OF", "INFLUENCE", "ALLY", "RIVAL", "CAUSE", "CUSTOM"].includes(i.value)
+    );
+  }
+  if (cat.includes("biography")) {
+    return all.filter((i) =>
+      ["FAMILY", "MENTOR", "ALLY", "RIVAL", "PART_OF", "LOCATION_OF", "INFLUENCE", "CAUSE", "CUSTOM"].includes(i.value)
+    );
+  }
+  return all;
 });
 
 const normalizeContent = (text) => (text || "").replace(/\r\n/g, "\n");
@@ -627,6 +667,18 @@ watch(
   }
 );
 
+watch(
+  relationOptions,
+  (opts) => {
+    if (!opts || !opts.length) return;
+    const values = opts.map((o) => o.value);
+    if (!values.includes(relationForm.relationType)) {
+      relationForm.relationType = values[0];
+    }
+  },
+  { immediate: true }
+);
+
 const handleContentSave = async (force = false) => {
   if (!store.selectedTextId || !store.selectedText) return;
   if (!editor.value) return;
@@ -691,14 +743,19 @@ const submitRelation = async () => {
     ElMessage.warning("请选择实体");
     return;
   }
-  await store.createRelationAnnotation({
-    textId: store.selectedTextId,
-    sourceEntityId: relationForm.sourceEntityId,
-    targetEntityId: relationForm.targetEntityId,
-    relationType: relationForm.relationType,
-    confidence: 0.8
-  });
-  ElMessage.success("关系已添加");
+  try {
+    await store.createRelationAnnotation({
+      textId: store.selectedTextId,
+      sourceEntityId: relationForm.sourceEntityId,
+      targetEntityId: relationForm.targetEntityId,
+      relationType: relationForm.relationType,
+      confidence: 0.8
+    });
+    ElMessage.success("关系已添加");
+  } catch (error) {
+    console.error("createRelation error", error);
+    ElMessage.error("关系添加失败，请检查登录状态或稍后再试");
+  }
 };
 
 const handleAutoSegment = async () => {
@@ -763,6 +820,27 @@ const translateCategoryLabel = (cat) => {
     OTHER: "其他"
   };
   return map[cat] || cat || "未分类";
+};
+
+const translateRelationLabel = (rel) => {
+  if (!rel) return "其他";
+  const key = String(rel).toUpperCase();
+  const map = {
+    FAMILY: "亲属",
+    ALLY: "结盟/支持",
+    SUPPORT: "结盟/支持",
+    RIVAL: "对抗/敌对",
+    CONFLICT: "对抗/敌对",
+    MENTOR: "师承/同门",
+    INFLUENCE: "影响/启发",
+    LOCATION_OF: "所在",
+    PART_OF: "隶属",
+    CAUSE: "因果",
+    TRAVEL: "行旅",
+    TEMPORAL: "时间/时序",
+    CUSTOM: "其他"
+  };
+  return map[key] || rel || "未知";
 };
 
 onBeforeUnmount(() => {
