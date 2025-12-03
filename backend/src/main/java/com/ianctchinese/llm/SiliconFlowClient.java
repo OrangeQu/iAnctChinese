@@ -173,6 +173,67 @@ public class SiliconFlowClient {
     }
   }
 
+  /**
+   * 让大模型分析事件的历史影响
+   * @param eventTitle 事件标题
+   * @param eventDescription 事件描述
+   * @param context 事件上下文
+   * @param category 文本类型（biography/travelogue/warfare等）
+   * @return 历史影响分析结果（简短，不超过80字）
+   */
+  public String analyzeEventImpact(String eventTitle, String eventDescription, String context, String category) {
+    String systemPrompt = """
+        你是一位分析中国古代历史事件的专家。请分析给定事件的历史影响或意义。
+        要求：
+        1. 回答必须是中文，50-80字
+        2. 重点分析该事件对人物、政治、军事或文化的实际影响
+        3. 即使是小事件也要尽量分析其意义，不要说"不重要"
+        4. 语言简洁、客观
+        """;
+
+    String categoryHint = switch (category) {
+      case "biography" -> "这是人物传记中的事件。分析该事件如何影响人物的仕途、声望或历史地位。";
+      case "warfare" -> "这是军事记录中的事件。分析该战役或军事行动的战略意义和政治后果。";
+      case "travelogue" -> "这是游记中的事件。分析该地点或旅程的文化、地理或历史意义。";
+      default -> "分析该事件的历史或文化意义。";
+    };
+
+    String userPrompt = """
+        事件：%s
+        描述：%s
+        上下文：%s
+
+        %s
+
+        请用50-80字分析该事件的历史影响或意义。
+        返回格式：{"impact":"你的分析内容"}
+        """.formatted(eventTitle, eventDescription,
+                     context != null && context.length() > 200 ? context.substring(0, 200) : context,
+                     categoryHint);
+
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, null);
+      log.debug("Event impact analysis for '{}': node={}", eventTitle, node);
+
+      if (node != null && node.has("impact")) {
+        String impact = node.path("impact").asText("").trim();
+        if (impact.isEmpty()) {
+          log.warn("Event impact for '{}' is empty from model", eventTitle);
+          return null;
+        }
+        log.debug("Event impact for '{}': {}", eventTitle, impact);
+        return impact;
+      } else {
+        log.warn("Event impact for '{}': model response missing 'impact' field. Response: {}",
+                 eventTitle, node != null ? node.toString() : "null");
+        return null;
+      }
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeEventImpact error for '{}': {}", eventTitle, ex.getMessage(), ex);
+      return null;
+    }
+  }
+
   private ClassificationPayload defaultClassification() {
     return ClassificationPayload.builder()
         .category("unknown")

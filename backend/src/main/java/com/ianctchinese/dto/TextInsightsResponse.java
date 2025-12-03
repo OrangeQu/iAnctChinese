@@ -44,6 +44,13 @@ public class TextInsightsResponse {
     private String description;
     private String dateLabel;
     private Integer significance;
+    private String eventType;
+    private String location;
+    private List<String> participants;
+    private String impact;
+    private Long entityId;
+    private Integer startOffset;
+    private Integer endOffset;
   }
 
   @Data

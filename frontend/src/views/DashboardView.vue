@@ -301,7 +301,11 @@ const viewProps = computed(() => {
     case "historyMap":
       return { availableEntities: store.entities || [], hideSidebar: true, activeCategories: store.filters.entityCategories };
     case "cloud": return { words: insights.value?.wordCloud || [] };
-    case "timeline": return { milestones: insights.value?.timeline || [] };
+    case "timeline": return {
+      milestones: insights.value?.timeline || [],
+      category: store.selectedText?.category || 'unknown',
+      onJumpToText: handleJumpToText
+    };
     case "map": return { points: insights.value?.mapPoints || [] };
     case "battle": return { events: insights.value?.battleTimeline || [] };
     case "family": return { nodes: insights.value?.familyTree || [] };
@@ -316,6 +320,16 @@ const viewProps = computed(() => {
       };
   }
 });
+
+const handleJumpToText = (data) => {
+  // 跳转到结构化阶段并高亮显示原文位置
+  stage.value = 'structure';
+  nextTick(() => {
+    // 触发高亮逻辑（如果需要的话）
+    console.log('跳转到原文:', data);
+    ElMessage.success('已跳转到原文位置');
+  });
+};
 
 const handleFilterChange = (filters) => {
   store.setEntityFilters(filters.entityCategories || []);
