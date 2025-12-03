@@ -71,7 +71,7 @@ public class SecurityConfig {
         // ✅ 改为明确指定前端地址 (注意不要带最后的斜杠)
         configuration.setAllowedOrigins(List.of("http://localhost:5173"));
         
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         
         // 允许携带凭证 (Cookie/Token)
