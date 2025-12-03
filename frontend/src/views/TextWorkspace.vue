@@ -6,17 +6,10 @@
           <h3 class="section-title">原文</h3>
           <el-button link @click="goBackToDocuments">返回文档管理</el-button>
         </div>
-        <QuillEditor
-          v-if="store.selectedText"
-          :content="editableContent"
-          @update:content="(val) => editableContent = val"
-          class="text-editor"
-          theme="snow"
-          content-type="text"
-          :read-only="savingContent"
-          @blur="handleContentSave"
-        />
-        <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文章</p>
+        <div v-if="store.selectedText" class="editor-wrapper">
+          <EditorContent :editor="editor" class="text-editor" />
+        </div>
+        <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文稿</p>
         <el-divider />
         <div class="action-row">
           <el-select
@@ -78,6 +71,7 @@
             <el-button type="primary" plain size="small" @click="entityDrawerVisible = true">
               抽屉查看（按类别分组）
             </el-button>
+            <span class="entity-hint">在原文中框选片段再点“添加实体”，即可直接高亮标注</span>
           </div>
           <el-table :data="entities" border size="small" height="220">
             <el-table-column prop="label" label="实体" width="140" />
@@ -195,7 +189,7 @@
             </div>
           </div>
         </div>
-        <p v-else class="placeholder">暂无句读分段，请先自动推荐或手动新增。</p>
+        <p v-else class="placeholder">暂无句读分段，请先自动推荐或手动新增</p>
       </section>
     </div>
   </div>
@@ -314,6 +308,8 @@ const editableContent = ref("");
 const savingContent = ref(false);
 const activeEntityId = ref(null);
 const entityDrawerVisible = ref(false);
+const allowHighlights = ref(false);
+const suppressSelectionUpdate = ref(false);
 
 const entityForm = reactive({
   label: "",
@@ -328,7 +324,6 @@ const relationForm = reactive({
   relationType: "CONFLICT"
 });
 
-// 避免重复设置内容
 const appliedContentSignature = ref("");
 
 const sections = computed(() => store.sections || []);
@@ -344,17 +339,8 @@ const activeRelations = computed(() => {
   );
 });
 
-const editor = useEditor({
-  extensions: [StarterKit.configure({ history: false }), EntityMark],
-  content: "",
-  editable: true,
-  onUpdate: ({ editor }) => {
-    editableContent.value = editor.getText();
-  }
-});
-
-// 规范化内容（CRLF -> LF）
 const normalizeContent = (text) => (text || "").replace(/\r\n/g, "\n");
+const condenseBlankLines = (text) => (text || "").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\n+$/g, "");
 
 const crlfToLfOffset = (offset, rawText) => {
   let crlfCount = 0;
@@ -362,10 +348,98 @@ const crlfToLfOffset = (offset, rawText) => {
   for (let i = 0; i < len; i++) {
     if (rawText[i] === "\r" && rawText[i + 1] === "\n") {
       crlfCount++;
-      i++; // 跳过 \n
+      i++; // skip \n
     }
   }
   return offset - crlfCount;
+};
+
+const lfToCrlfOffset = (offset, text) => {
+  const lfText = normalizeContent(text || "");
+  const clamped = Math.max(0, Math.min(offset, lfText.length));
+  const newlineCount = (lfText.slice(0, clamped).match(/\n/g) || []).length;
+  return clamped + newlineCount;
+};
+
+const buildDocFromPlain = (text) => {
+  const paragraphs = (text || "").split(/\n/);
+  return {
+    type: "doc",
+    content: paragraphs.map((line) => ({
+      type: "paragraph",
+      content: line ? [{ type: "text", text: line }] : []
+    }))
+  };
+};
+
+const editor = useEditor({
+  extensions: [StarterKit.configure({ history: false }), EntityMark],
+  content: "",
+  editable: true,
+  onUpdate: ({ editor }) => {
+    editableContent.value = editor.getText();
+  },
+  onSelectionUpdate: () => {
+    if (suppressSelectionUpdate.value) return;
+    updateSelectionMeta();
+  },
+  onBlur: () => {
+    handleContentSave();
+  }
+});
+
+const getDocText = () => {
+  const ed = editor.value;
+  if (!ed) return "";
+  const docSize = ed.state.doc.content.size;
+  return ed.state.doc.textBetween(0, docSize, "\n", "\n");
+};
+
+const getOffsetFromPos = (pos) => {
+  const ed = editor.value;
+  if (!ed) return 0;
+  return ed.state.doc.textBetween(0, pos, "\n", "\n").length;
+};
+
+// 将按 \n 计数的线性 offset 映射回 ProseMirror 的文档位置
+const getPosFromOffset = (offset) => {
+  const ed = editor.value;
+  if (!ed) return 1;
+  const doc = ed.state.doc;
+  const size = doc.content.size;
+  const target = Math.max(0, offset);
+  // 二分搜索找到最小的 pos，使得 textBetween(0, pos) 的长度 >= target
+  let lo = 1;
+  let hi = size - 1;
+  let ans = hi;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const len = doc.textBetween(0, mid, "\n", "\n").length;
+    if (len >= target) {
+      ans = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return Math.min(Math.max(ans, 1), size - 1);
+};
+
+const updateSelectionMeta = () => {
+  const ed = editor.value;
+  if (!ed) return;
+  const { from, to } = ed.state.selection;
+  if (from === to) return;
+  const selectedTextRaw = ed.state.doc.textBetween(from, to, "\n", "\n");
+  const selectedText = selectedTextRaw.trim();
+  // 避免一次性选中过长片段导致名称被填充全文
+  if (!selectedText || selectedText.length > 2000) return;
+  const plainText = getDocText();
+  const startLf = getOffsetFromPos(from);
+  const endLf = getOffsetFromPos(to);
+  entityForm.startOffset = lfToCrlfOffset(startLf, plainText);
+  entityForm.endOffset = lfToCrlfOffset(endLf, plainText);
+  entityForm.label = selectedText;
 };
 
 watch(
@@ -403,17 +477,6 @@ const groupedEntities = computed(() => {
   return map;
 });
 
-const buildDocFromPlain = (text) => {
-  const paragraphs = (text || "").split(/\n/);
-  return {
-    type: "doc",
-    content: paragraphs.map((line) => ({
-      type: "paragraph",
-      content: line ? [{ type: "text", text: line }] : []
-    }))
-  };
-};
-
 const syncContentToEditor = () => {
   if (!editor.value) return;
   if (store.selectedText?.content === undefined || store.selectedText?.content === null) return;
@@ -422,7 +485,8 @@ const syncContentToEditor = () => {
   if (appliedContentSignature.value === signature) return;
 
   const normalized = normalizeContent(rawValue);
-  editor.value.commands.setContent(buildDocFromPlain(normalized), false);
+  const cleaned = condenseBlankLines(normalized);
+  editor.value.commands.setContent(buildDocFromPlain(cleaned), false);
   appliedContentSignature.value = signature;
   editableContent.value = editor.value.getText();
   nextTick(applyEntityHighlight);
@@ -431,6 +495,7 @@ const syncContentToEditor = () => {
 function applyEntityHighlight() {
   const ed = editor?.value;
   if (!ed || !store.selectedText?.content) return;
+  if (!allowHighlights.value) return;
   const state = ed.state;
   const doc = state.doc;
   const docSize = doc.content.size;
@@ -440,22 +505,7 @@ function applyEntityHighlight() {
   // 映射字符偏移到 ProseMirror 位置，块间加 \n
   const offsetToPos = (offset) => {
     const target = Math.max(0, Math.min(offset, textLen));
-    let acc = 0;
-    let found = docSize - 1;
-    doc.descendants((node, pos, parent) => {
-      if (node.isText) {
-        const len = node.text?.length || 0;
-        if (acc + len >= target) {
-          found = pos + (target - acc) + 1;
-          return false;
-        }
-        acc += len;
-      } else if (node.isBlock && parent) {
-        if (acc < textLen) acc += 1; // 块间换行
-      }
-      return true;
-    });
-    return Math.min(found, docSize - 1);
+    return getPosFromOffset(target);
   };
 
   const rawText = store.selectedText?.content || "";
@@ -473,7 +523,7 @@ function applyEntityHighlight() {
       idx = lfText.indexOf(label, idx);
       if (idx === -1) break;
       const end = idx + label.length;
-      if (target == null) return [idx, end]; // 无偏移信息时取首次
+      if (target == null) return [idx, end]; // 无偏移信息时取首个匹配
       const dist = Math.abs(idx - target);
       if (!best || dist < best.dist) best = { dist, range: [idx, end] };
       idx = end;
@@ -481,24 +531,39 @@ function applyEntityHighlight() {
     return best ? best.range : null;
   };
 
-  ed.chain().setTextSelection({ from: 1, to: docSize }).unsetMark("entity").run();
+  const prevSel = state.selection;
 
-  let tr = state.tr;
-  const markType = state.schema.marks.entity;
+  suppressSelectionUpdate.value = true;
+  try {
+    ed.chain().setTextSelection({ from: 1, to: docSize }).unsetMark("entity").run();
 
-  entities.value.forEach((entity) => {
-    const range = findRangeBySearch(entity);
-    if (!range) return;
-    const [startOffset, endOffset] = range;
-    if (startOffset >= lfLen) return;
-    const from = offsetToPos(startOffset);
-    const to = offsetToPos(Math.min(endOffset, lfLen));
-    if (to <= from) return;
-    tr = tr.addMark(from, to, markType.create({ id: entity.id, category: entity.category, label: entity.label }));
-  });
+    let tr = state.tr;
+    const markType = state.schema.marks.entity;
 
-  tr = tr.setSelection(TextSelection.near(tr.doc.resolve(1)));
-  ed.view.dispatch(tr);
+    entities.value.forEach((entity) => {
+      const range = findRangeBySearch(entity);
+      if (!range) return;
+      const [startOffset, endOffset] = range;
+      if (startOffset >= lfLen) return;
+      const from = offsetToPos(startOffset);
+      const to = offsetToPos(Math.min(endOffset, lfLen));
+      if (to <= from) return;
+      tr = tr.addMark(
+        from,
+        to,
+        markType.create({ id: entity.id, category: entity.category, label: entity.label })
+      );
+    });
+
+    const safeFrom = Math.max(1, Math.min(prevSel.from, tr.doc.content.size - 1));
+    const safeTo = Math.max(1, Math.min(prevSel.to, tr.doc.content.size - 1));
+    tr = tr.setSelection(
+      TextSelection.between(tr.doc.resolve(safeFrom), tr.doc.resolve(Math.max(safeFrom, safeTo)))
+    );
+    ed.view.dispatch(tr);
+  } finally {
+    suppressSelectionUpdate.value = false;
+  }
 }
 
 watch(
@@ -522,7 +587,6 @@ watch(
 
 watch(editableContent, () => nextTick(applyEntityHighlight));
 
-// 当原文变化且编辑器就绪时同步到编辑器
 watch(
   () => store.selectedText?.content,
   (value) => {
@@ -533,7 +597,6 @@ watch(
   { immediate: true }
 );
 
-// 防止首次进入时遗漏同步：监听编辑器实例与文本ID
 watch(
   () => [editor.value, store.selectedTextId],
   () => {
@@ -542,19 +605,42 @@ watch(
   }
 );
 
+watch(
+  () => store.selectedTextId,
+  () => {
+    allowHighlights.value = false;
+    entityForm.label = "";
+    entityForm.startOffset = 0;
+    entityForm.endOffset = 0;
+  }
+);
+
+watch(
+  () => entities.value.length,
+  (len) => {
+    if (len > 0) {
+      allowHighlights.value = true;
+      nextTick(applyEntityHighlight);
+    } else {
+      allowHighlights.value = false;
+    }
+  }
+);
+
 const handleContentSave = async (force = false) => {
   if (!store.selectedTextId || !store.selectedText) return;
   if (!editor.value) return;
   let currentText = editor.value.getText();
   if (currentText.endsWith("\n")) {
-    currentText = currentText.slice(0, -1); // 去掉编辑器自动追加的行尾
+    currentText = currentText.slice(0, -1);
   }
+  currentText = condenseBlankLines(currentText);
   const crlfContent = currentText.replace(/\n/g, "\r\n");
   if (!force && (savingContent.value || crlfContent === store.selectedText.content)) return;
   savingContent.value = true;
   try {
     const payload = {
-      title: store.selectedText.title || "未命名文本",
+      title: store.selectedText.title || "未命名文稿",
       content: crlfContent,
       category: store.selectedText.category || "unknown",
       author: store.selectedText.author || "",
@@ -565,6 +651,8 @@ const handleContentSave = async (force = false) => {
     editableContent.value = normalizeContent(updated.content);
     ElMessage.success("原文内容已保存");
   } catch (error) {
+    // 输出详细错误方便定位
+    console.error("保存原文失败", error);
     ElMessage.error("原文保存失败，请稍后重试");
   } finally {
     savingContent.value = false;
@@ -577,7 +665,11 @@ const goBackToDocuments = () => {
 
 const submitEntity = async () => {
   if (!entityForm.label) {
-    ElMessage.warning("请填写实体名称");
+    ElMessage.warning("请填写实体名称或先框选原文片段");
+    return;
+  }
+  if (entityForm.endOffset <= entityForm.startOffset) {
+    ElMessage.warning("请在原文中框选需要标注的文本");
     return;
   }
   await store.createEntityAnnotation({
@@ -589,6 +681,8 @@ const submitEntity = async () => {
     confidence: 0.9
   });
   ElMessage.success("实体已添加");
+  allowHighlights.value = true;
+  nextTick(applyEntityHighlight);
   entityForm.label = "";
 };
 
@@ -623,18 +717,26 @@ const handleUpdateSection = async (section) => {
 
 const handleFullAnalysis = async () => {
   try {
+    entityForm.label = "";
+    await handleContentSave(true);
     await store.runFullAnalysis(selectedModel.value);
+    allowHighlights.value = true;
+    nextTick(applyEntityHighlight);
     ElMessage.success("模型分析完成，已更新标注与句读");
   } catch (error) {
+    console.error("模型分析失败", error);
     ElMessage.error("模型分析失败，请稍后重试");
   }
 };
 
 const handleClassify = async () => {
   try {
+    entityForm.label = "";
+    await handleContentSave(true);
     await store.classifySelectedText(selectedModel.value);
     ElMessage.success("模型已完成类型判断");
   } catch (error) {
+    console.error("类型判断失败", error);
     ElMessage.error("类型判断失败，请稍后重试");
   }
 };
@@ -703,6 +805,12 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
 }
 
+.editor-wrapper {
+  border: 1px solid #e4e7ed;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 .placeholder {
   color: var(--muted);
   margin: 0;
@@ -719,18 +827,24 @@ onBeforeUnmount(() => {
 }
 
 .text-editor {
-  border: 1px solid #e4e7ed;
-  border-radius: 12px;
-  min-height: 240px;
+  min-height: 260px;
   padding: 12px;
+  background: #fff;
 }
 
 .text-editor :deep(.ProseMirror) {
-  min-height: 200px;
+  min-height: 220px;
   outline: none;
   line-height: 1.8;
   font-size: 15px;
   color: #4a443e;
+  white-space: pre-wrap;
+}
+.text-editor :deep(p) {
+  margin: 0 0 8px;
+}
+.text-editor :deep(p:last-child) {
+  margin-bottom: 0;
 }
 
 .annotation-section {
@@ -743,6 +857,18 @@ onBeforeUnmount(() => {
 
 .align-button {
   margin-top: 2px;
+}
+
+.entity-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+
+.entity-hint {
+  font-size: 12px;
+  color: #8c7a6b;
 }
 
 .section-actions {
