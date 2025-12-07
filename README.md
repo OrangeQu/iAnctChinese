@@ -31,7 +31,7 @@ E:\iAnctChinese
    ```
 3. 进入 `backend` 目录，安装依赖并启动：
    ```bash
-   mvn spring-boot:run
+   mvn spring-boot:run 
    ```
 4. 默认配置（见 `application.yml`）会使用：
    - JDBC：`jdbc:mysql://localhost:3306/ianct_chinese`

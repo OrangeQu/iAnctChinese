@@ -26,6 +26,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       HttpServletResponse response,
       FilterChain filterChain
   ) throws ServletException, IOException {
+    // 放行地理标注接口，避免未登录时拦截
+    String uri = request.getRequestURI();
+    if (uri != null && uri.startsWith("/api/geo/")) {
+      filterChain.doFilter(request, response);
+      return;
+    }
+
     final String authHeader = request.getHeader("Authorization");
     String username = null;
     String jwt = null;

@@ -323,4 +323,16 @@ public class SiliconFlowClient {
     String json = (start >= 0 && end >= start) ? content.substring(start, end + 1) : content;
     return objectMapper.readTree(json);
   }
+
+  /**
+   * 通用对话入口：返回原始 JsonNode，供地理编码等灵活场景使用。
+   */
+  public JsonNode chat(String systemPrompt, String userPrompt, String modelName) {
+    try {
+      return sendAndParse(systemPrompt, userPrompt, modelName);
+    } catch (Exception e) {
+      log.warn("SiliconFlow chat error: {}", e.getMessage());
+      return null;
+    }
+  }
 }
