@@ -50,3 +50,9 @@ logging:
 siliconflow:
   api-key: sk-rozyqiofobetxzpozmiqfxnwemhvpxvotndkbugnrkaurcwj
   default-model: deepseek-ai/DeepSeek-V3
+
+
+
+tmap:
+  key: J5ABZ-GNNRN-4BHFW-SGFPX-IJ4YS-JCBV3
+  sk: VMjXTReGHohVTcVy54Jc09dND65H6pQA

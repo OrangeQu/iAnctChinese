@@ -181,7 +181,7 @@ import FamilyTreeView from "@/components/visualizations/FamilyTreeView.vue";
 import BattleTimelineView from "@/components/visualizations/BattleTimelineView.vue";
 import TextWorkspace from "./TextWorkspace.vue";
 import WordCloudCanvas from "@/components/visualizations/WordCloudCanvas.vue";
-import HistoryMap from "@/components/visualizations/HistoryMap.vue";
+import HistoryMap from "@/components/visualizations/MapView.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -299,14 +299,25 @@ const insights = computed(() => store.insights);
 const viewProps = computed(() => {
   switch (viewType.value) {
     case "historyMap":
-      return { availableEntities: store.entities || [], hideSidebar: true, activeCategories: store.filters.entityCategories };
+      return { 
+        locations: (store.entities || []).filter((e) => e.category === "LOCATION"),
+        points: insights.value?.mapPoints || [],
+        allEntities: store.entities || []
+      };
     case "cloud": return { words: insights.value?.wordCloud || [] };
     case "timeline": return {
       milestones: insights.value?.timeline || [],
       category: store.selectedText?.category || 'unknown',
       onJumpToText: handleJumpToText
     };
-    case "map": return { points: insights.value?.mapPoints || [] };
+    case "map": {
+      const locs = (store.entities || []).filter((e) => e.category === "LOCATION");
+      return { 
+        locations: locs.length ? locs : (store.entities || []), // 若无LOCATION，则回退全部实体尝试定位
+        points: insights.value?.mapPoints || [],
+        allEntities: store.entities || []
+      };
+    }
     case "battle": return { events: insights.value?.battleTimeline || [] };
     case "family": return { nodes: insights.value?.familyTree || [] };
     case "graph":
@@ -358,13 +369,15 @@ watch(viewType, (val) => {
 // 将可用实体列表移到右侧面板
 const availableEntitiesPanel = computed(() => {
   if (viewType.value === "historyMap") {
-    const fromChild = viewComponentRef.value?.sidebarEntities?.value;
-    if (fromChild && Array.isArray(fromChild)) {
-      return fromChild;
-    }
     return store.entities || [];
   }
   if (viewType.value === "graph") {
+    return store.entities || [];
+  }
+  if (viewType.value === "map") {
+    // 地图视图：优先地点实体，若无则展示全部，便于拖拽/确认
+    const locs = (store.entities || []).filter((e) => e.category === "LOCATION");
+    if (locs.length) return locs;
     return store.entities || [];
   }
   return [];
@@ -372,17 +385,18 @@ const availableEntitiesPanel = computed(() => {
 
 const isEntityMapped = (id) => {
   if (viewType.value !== "historyMap") return false;
-  return viewComponentRef.value?.isEntityMapped?.(id) || false;
+  return false;
 };
 
 const startEntityDrag = (evt, entity) => {
   if (viewType.value !== "historyMap") return;
-  viewComponentRef.value?.onDragStart?.(evt, entity);
+  // 当前 historyMap 使用腾讯地图组件，不支持拖拽
+  evt.preventDefault();
 };
 
 const entityColor = (category) => {
   if (viewType.value !== "historyMap") return "#95a5a6";
-  return viewComponentRef.value?.getEntityColor?.(category) || "#95a5a6";
+  return "#95a5a6";
 };
 </script>
 

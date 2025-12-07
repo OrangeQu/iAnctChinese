@@ -46,6 +46,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 // ⭐ 放行地图接口
                 .requestMatchers("/api/visualization/**").permitAll()
+                .requestMatchers("/api/geo/**").permitAll()
                 .anyRequest().authenticated()
             )
             
