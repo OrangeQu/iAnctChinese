@@ -54,5 +54,5 @@ siliconflow:
 
 
 tmap:
-  key: J5ABZ-GNNRN-4BHFW-SGFPX-IJ4YS-JCBV3
-  sk: VMjXTReGHohVTcVy54Jc09dND65H6pQA
+  key: A2HBZ-E2O3W-EWHRI-YLBHD-OBEX3-WBFYN
+  sk: ""  # 此 Key 使用 IP 白名单模式，不需要签名验证
