@@ -11,8 +11,11 @@ import com.ianctchinese.dto.TextInsightsResponse.MapPathPoint;
 import com.ianctchinese.dto.TextInsightsResponse.Stats;
 import com.ianctchinese.dto.TextInsightsResponse.TimelineEvent;
 import com.ianctchinese.dto.TextInsightsResponse.WordCloudItem;
+import com.ianctchinese.llm.GeoService;
 import com.ianctchinese.llm.SiliconFlowClient;
 import com.ianctchinese.llm.dto.AnnotationPayload;
+import com.ianctchinese.llm.dto.GeoLocateRequest;
+import com.ianctchinese.llm.dto.GeoPointDto;
 import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationEntity;
 import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationRelation;
 import com.ianctchinese.llm.dto.ClassificationPayload;
@@ -67,6 +70,7 @@ public class AnalysisServiceImpl implements AnalysisService {
   private final TextSectionRepository textSectionRepository;
   private final TextSectionService textSectionService;
   private final SiliconFlowClient siliconFlowClient;
+  private final GeoService geoService;
 
   @Override
   @Transactional
@@ -99,7 +103,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     List<WordCloudItem> wordCloud = buildWordCloud(entities, text.getContent());
     List<TimelineEvent> timeline = buildTimelineFromEntities(text, entities, relations);
-    List<MapPathPoint> mapPoints = buildMapPointsForCategory(text.getCategory());
+    List<MapPathPoint> mapPoints = buildMapPointsFromEntities(textId, entities);
     List<String> recommendedViews = buildRecommendedViews(text.getCategory());
     List<BattleEvent> battleTimeline = buildBattleTimeline(text.getCategory());
     List<FamilyNode> familyTree = buildFamilyTree(text.getCategory(), entities, relations);
@@ -975,16 +979,49 @@ public class AnalysisServiceImpl implements AnalysisService {
     return events;
   }
 
-  private List<MapPathPoint> buildMapPointsForCategory(String category) {
-    if (!"travelogue".equals(category)) {
+  private List<MapPathPoint> buildMapPointsFromEntities(Long textId, List<EntityAnnotation> entities) {
+    // 筛选出地点类型的实体
+    List<EntityAnnotation> locationEntities = entities.stream()
+        .filter(e -> e.getCategory() == EntityCategory.LOCATION)
+        .toList();
+
+    if (locationEntities.isEmpty()) {
+      log.info("No LOCATION entities found for text {}", textId);
       return Collections.emptyList();
     }
-    return List.of(
-        MapPathPoint.builder().label("长安").latitude(34.3416).longitude(108.9398).sequence(1).build(),
-        MapPathPoint.builder().label("襄阳").latitude(32.065).longitude(112.153).sequence(2).build(),
-        MapPathPoint.builder().label("武夷山").latitude(27.728).longitude(118.035).sequence(3).build(),
-        MapPathPoint.builder().label("建康").latitude(32.058).longitude(118.796).sequence(4).build()
-    );
+
+    log.info("Found {} LOCATION entities for text {}, calling GeoService to get coordinates",
+        locationEntities.size(), textId);
+
+    // 构建 GeoLocateRequest
+    GeoLocateRequest request = new GeoLocateRequest();
+    request.setTextId(textId);
+    request.setEntities(locationEntities.stream()
+        .map(e -> {
+          GeoLocateRequest.EntityDto dto = new GeoLocateRequest.EntityDto();
+          dto.setId(e.getId());
+          dto.setLabel(e.getLabel());
+          dto.setCategory(e.getCategory() != null ? e.getCategory().name() : null);
+          return dto;
+        })
+        .toList());
+
+    // 调用 GeoService 获取坐标
+    List<GeoPointDto> geoPoints = geoService.locate(request);
+    log.info("GeoService returned {} points for text {}", geoPoints.size(), textId);
+
+    // 转换为 MapPathPoint
+    List<MapPathPoint> mapPoints = new ArrayList<>();
+    int seq = 1;
+    for (GeoPointDto p : geoPoints) {
+      mapPoints.add(MapPathPoint.builder()
+          .label(p.getLabel())
+          .latitude(p.getLatitude())
+          .longitude(p.getLongitude())
+          .sequence(seq++)
+          .build());
+    }
+    return mapPoints;
   }
 
   private List<BattleEvent> buildBattleTimeline(String category) {

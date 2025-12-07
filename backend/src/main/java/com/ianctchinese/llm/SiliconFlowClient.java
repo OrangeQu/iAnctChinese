@@ -318,9 +318,23 @@ public class SiliconFlowClient {
     if (content == null || content.isBlank()) {
       return null;
     }
-    int start = content.indexOf('{');
-    int end = content.lastIndexOf('}');
-    String json = (start >= 0 && end >= start) ? content.substring(start, end + 1) : content;
+    // 支持 JSON 对象 {...} 和 JSON 数组 [...]
+    int objStart = content.indexOf('{');
+    int arrStart = content.indexOf('[');
+    int objEnd = content.lastIndexOf('}');
+    int arrEnd = content.lastIndexOf(']');
+
+    String json;
+    if (arrStart >= 0 && (objStart < 0 || arrStart < objStart) && arrEnd > arrStart) {
+      // JSON 数组在前或只有数组
+      json = content.substring(arrStart, arrEnd + 1);
+    } else if (objStart >= 0 && objEnd > objStart) {
+      // JSON 对象
+      json = content.substring(objStart, objEnd + 1);
+    } else {
+      json = content;
+    }
+    log.debug("Parsed JSON: {}", json.length() > 500 ? json.substring(0, 500) + "..." : json);
     return objectMapper.readTree(json);
   }
 

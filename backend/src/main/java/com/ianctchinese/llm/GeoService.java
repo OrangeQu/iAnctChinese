@@ -29,6 +29,7 @@ public class GeoService {
     List<GeoLocateRequest.EntityDto> entities = Optional.ofNullable(req.getEntities())
         .orElse(List.of());
     if (entities.isEmpty()) {
+      log.warn("Geo locate: entities list is empty");
       return List.of();
     }
 
@@ -37,23 +38,34 @@ public class GeoService {
         .append("{\"entityId\":").append(e.getId()).append(",\"label\":\"")
         .append(Optional.ofNullable(e.getLabel()).orElse("").trim()).append("\"}\n"));
 
+    log.info("Geo locate request: model={}, entities={}", req.getModel(), userPrompt);
+
     String model = Optional.ofNullable(req.getModel()).filter(s -> !s.isBlank()).orElse(null);
     JsonNode node = llmClient.chat(SYSTEM_PROMPT, userPrompt.toString(), model);
+
+    log.info("Geo locate LLM response node type: {}, content: {}",
+        node != null ? node.getNodeType() : "null",
+        node != null ? (node.toString().length() > 500 ? node.toString().substring(0, 500) : node.toString()) : "null");
 
     List<GeoPointDto> points = new ArrayList<>();
     if (node != null) {
       if (node.isArray()) {
+        log.info("Parsing as JSON array with {} elements", node.size());
         node.forEach(n -> addPoint(points, n));
       } else if (node.has("points") && node.get("points").isArray()) {
+        log.info("Parsing 'points' field as JSON array");
         node.get("points").forEach(n -> addPoint(points, n));
       } else if (node.isObject()) {
-        addPoint(points, node); // 单个对象也接受
+        log.info("Parsing as single JSON object");
+        addPoint(points, node);
       } else {
-        log.warn("Geo locate llm response invalid: {}", node);
+        log.warn("Geo locate llm response invalid format: {}", node);
       }
     } else {
-        log.warn("Geo locate llm response invalid: null");
+      log.warn("Geo locate llm response is null");
     }
+
+    log.info("Geo locate result: {} points found", points.size());
     return points;
   }
 

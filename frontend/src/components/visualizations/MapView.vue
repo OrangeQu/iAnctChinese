@@ -101,24 +101,32 @@ const loadTMap = () =>
     document.body.appendChild(script);
   });
 
+const MARKER_ICON_LLM = "data:image/svg+xml;base64," + btoa(`
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+  <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="#3b82f6"/>
+  <circle cx="16" cy="14" r="6" fill="#ffffff"/>
+</svg>`);
+
+const MARKER_ICON_MANUAL = "data:image/svg+xml;base64," + btoa(`
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+  <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="#f97316"/>
+  <circle cx="16" cy="14" r="6" fill="#ffffff"/>
+</svg>`);
+
 const markerStyles = {
   llm: () =>
     new window.TMap.MarkerStyle({
-      width: 24,
-      height: 24,
-      color: "#3b82f6",
-      borderColor: "#ffffff",
-      borderWidth: 2,
-      anchor: { x: 12, y: 12 }
+      width: 32,
+      height: 40,
+      src: MARKER_ICON_LLM,
+      anchor: { x: 16, y: 40 }
     }),
   manual: () =>
     new window.TMap.MarkerStyle({
-      width: 24,
-      height: 24,
-      color: "#f97316",
-      borderColor: "#ffffff",
-      borderWidth: 2,
-      anchor: { x: 12, y: 12 }
+      width: 32,
+      height: 40,
+      src: MARKER_ICON_MANUAL,
+      anchor: { x: 16, y: 40 }
     })
 };
 

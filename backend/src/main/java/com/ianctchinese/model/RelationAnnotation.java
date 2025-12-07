@@ -44,7 +44,7 @@ public class RelationAnnotation {
   private EntityAnnotation target;
 
   // 显式声明枚举取值，便于 Hibernate 在 MySQL 上将 ENUM 同步为完整的类型集合，避免“Data truncated for column 'relation_type'”
-  @Column(columnDefinition = "enum('ALLY','SUPPORT','RIVAL','CONFLICT','FAMILY','MENTOR','INFLUENCE','LOCATION_OF','PART_OF','CAUSE','TEMPORAL','TRAVEL','CUSTOM')")
+  @Column(length = 64)
   @Enumerated(EnumType.STRING)
   private RelationType relationType;
 
