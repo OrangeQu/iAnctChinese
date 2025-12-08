@@ -393,6 +393,15 @@ const handleJumpToText = (data) => {
   });
 };
 
+const ensureFullInsights = async () => {
+  if (stage.value !== "graph") return;
+  const currentMode = store.insights?.mode || "full";
+  const needFull = currentMode !== "full" && ["graph", "map", "historyMap"].includes(viewType.value);
+  if (needFull && store.selectedTextId) {
+    await store.loadInsights({ textId: store.selectedTextId, light: false });
+  }
+};
+
 const handleFilterChange = (filters) => {
   store.setEntityFilters(filters.entityCategories || []);
   store.setRelationFilters(filters.relationTypes || []);
@@ -419,13 +428,25 @@ const selectFromSearch = async (textId) => {
 const translateEntity = (cat) => cat === "PERSON" ? "人物" : cat;
 
 // 刷新后保持在当前阶段/视图
-watch(stage, (val) => localStorage.setItem(STORAGE_STAGE_KEY, val));
+watch(stage, (val) => {
+  localStorage.setItem(STORAGE_STAGE_KEY, val);
+  if (val === "graph") {
+    ensureFullInsights();
+  }
+}, { immediate: true });
 watch(viewType, (val) => {
   localStorage.setItem(STORAGE_VIEW_KEY, val);
   if (store.selectedTextId) {
     const perTextViews = JSON.parse(localStorage.getItem(STORAGE_VIEW_PER_TEXT_KEY) || "{}");
     perTextViews[String(store.selectedTextId)] = val;
     localStorage.setItem(STORAGE_VIEW_PER_TEXT_KEY, JSON.stringify(perTextViews));
+  }
+  ensureFullInsights();
+});
+
+watch(() => store.selectedTextId, () => {
+  if (stage.value === "graph") {
+    ensureFullInsights();
   }
 });
 

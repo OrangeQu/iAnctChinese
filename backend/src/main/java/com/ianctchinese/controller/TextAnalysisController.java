@@ -39,7 +39,8 @@ public class TextAnalysisController {
   }
 
   @GetMapping("/{textId}/insights")
-  public ResponseEntity<TextInsightsResponse> insights(@PathVariable("textId") Long textId) {
-    return ResponseEntity.ok(analysisService.buildInsights(textId));
+  public ResponseEntity<TextInsightsResponse> insights(@PathVariable("textId") Long textId,
+      @RequestParam(value = "light", defaultValue = "true") boolean light) {
+    return ResponseEntity.ok(analysisService.buildInsights(textId, light));
   }
 }

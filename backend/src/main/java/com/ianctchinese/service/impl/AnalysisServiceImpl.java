@@ -94,7 +94,7 @@ public class AnalysisServiceImpl implements AnalysisService {
   }
 
   @Override
-  public TextInsightsResponse buildInsights(Long textId) {
+  public TextInsightsResponse buildInsights(Long textId, boolean light) {
     TextDocument text = loadText(textId);
     List<EntityAnnotation> entities = entityAnnotationRepository.findByTextDocumentId(textId);
     List<RelationAnnotation> relations = relationAnnotationRepository.findByTextDocumentId(textId);
@@ -108,7 +108,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     List<WordCloudItem> wordCloud = buildWordCloud(entities, text.getContent());
     List<TimelineEvent> timeline = buildTimelineFromEntities(text, entities, relations);
-    List<MapPathPoint> mapPoints = buildMapPointsFromEntities(textId, entities);
+    List<MapPathPoint> mapPoints = light ? Collections.emptyList() : buildMapPointsFromEntities(textId, entities);
     List<String> recommendedViews = buildRecommendedViews(text.getCategory());
     List<BattleEvent> battleTimeline = buildBattleTimeline(text.getCategory());
     List<FamilyNode> familyTree = buildFamilyTree(text.getCategory(), entities, relations);
@@ -128,6 +128,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         .processCycle(processCycle)
         .recommendedViews(recommendedViews)
         .analysisSummary(buildAnalysisSummary(text, stats))
+        .mode(light ? "light" : "full")
         .build();
   }
 
@@ -208,7 +209,7 @@ public class AnalysisServiceImpl implements AnalysisService {
           .message("LLM 失败，已返回启发式结果")
           .build();
 
-      TextInsightsResponse insights = buildInsights(textId);
+      TextInsightsResponse insights = buildInsights(textId, false);
       List<TextSection> sections = textSectionRepository.findByTextDocumentId(textId);
       return ModelAnalysisResponse.builder()
           .classification(classification)
@@ -263,7 +264,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         .message("模型已生成实体、关系与句读，可在前端继续校对。")
         .build();
 
-    TextInsightsResponse insights = buildInsights(textId);
+    TextInsightsResponse insights = buildInsights(textId, false);
     List<TextSection> sections = textSectionRepository.findByTextDocumentId(textId);
     return ModelAnalysisResponse.builder()
         .classification(classification)

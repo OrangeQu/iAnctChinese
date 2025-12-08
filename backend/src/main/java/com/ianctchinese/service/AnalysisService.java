@@ -9,7 +9,11 @@ public interface AnalysisService {
 
   ClassificationResponse classifyText(Long textId, String model);
 
-  TextInsightsResponse buildInsights(Long textId);
+  default TextInsightsResponse buildInsights(Long textId) {
+    return buildInsights(textId, false);
+  }
+
+  TextInsightsResponse buildInsights(Long textId, boolean light);
 
   AutoAnnotationResponse autoAnnotate(Long textId);
 

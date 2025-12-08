@@ -77,7 +77,7 @@ export const useTextStore = defineStore("textStore", {
         Promise.allSettled([
           fetchEntities(id),
           fetchRelations(id),
-          fetchInsights(id),
+          fetchInsights(id, { light: true }),
           fetchSections(id)
         ]).then((results) => {
           this.entities = results[0].status === "fulfilled" ? results[0].value.data : [];
@@ -119,12 +119,21 @@ export const useTextStore = defineStore("textStore", {
       }
     },
     async createEntityAnnotation(payload) {
-      await createEntity(payload);
-      await this.selectText(payload.textId);
+      const { data: created } = await createEntity(payload);
+      // 乐观更新：立即注入本地实体列表，保证高亮立刻出现
+      const exists = this.entities.some((e) => e.id === created.id);
+      this.entities = exists ? this.entities : [...this.entities, created];
+      // 可选：如需刷新关系/洞察可在进入图谱视图时再触发
+      this.filters.entityCategories = [...this.entityOptions];
+      this.filters.relationTypes = [...this.relationOptions];
     },
     async createRelationAnnotation(payload) {
-      await createRelation(payload);
-      await this.selectText(payload.textId);
+      const { data: created } = await createRelation(payload);
+      // 乐观更新：立即注入本地关系列表
+      const exists = this.relations.some((r) => r.id === created.id);
+      this.relations = exists ? this.relations : [...this.relations, created];
+      this.filters.entityCategories = [...this.entityOptions];
+      this.filters.relationTypes = [...this.relationOptions];
     },
     async classifySelectedText(model) {
       if (!this.selectedTextId) {
@@ -229,6 +238,12 @@ export const useTextStore = defineStore("textStore", {
       if (index >= 0) {
         this.sections[index] = data;
       }
+    },
+    async loadInsights({ textId = this.selectedTextId, light = false } = {}) {
+      if (!textId) return;
+      const params = light ? { light: true } : {};
+      const { data } = await fetchInsights(textId, params);
+      this.insights = data;
     },
     async loadNavigationTree() {
       const { data } = await fetchNavigationTree();

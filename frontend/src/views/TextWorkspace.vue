@@ -576,7 +576,11 @@ const syncContentToEditor = () => {
 function applyEntityHighlight() {
   const ed = editor?.value;
   if (!ed || !store.selectedText?.content) return;
-  if (!allowHighlights.value) return;
+  if (!entities.value || entities.value.length === 0) return;
+  // 确保高亮开关在有实体时自动开启
+  if (!allowHighlights.value) {
+    allowHighlights.value = true;
+  }
   const state = ed.state;
   const doc = state.doc;
   const docSize = doc.content.size;
@@ -696,6 +700,17 @@ watch(
   }
 );
 
+// 模型分析完成后强制重刷高亮，防止中途清空 mark 后未恢复
+watch(
+  () => store.analysisRunning,
+  (running) => {
+    if (!running && (entities.value || []).length > 0) {
+      allowHighlights.value = true;
+      nextTick(applyEntityHighlight);
+    }
+  }
+);
+
 watch(
   () => entities.value.length,
   (len) => {
@@ -705,7 +720,8 @@ watch(
     } else {
       allowHighlights.value = false;
     }
-  }
+  },
+  { immediate: true }
 );
 
 watch(
@@ -886,6 +902,13 @@ const translateRelationLabel = (rel) => {
 
 onBeforeUnmount(() => {
   editor.value?.destroy();
+});
+
+onMounted(() => {
+  if ((entities.value || []).length > 0) {
+    allowHighlights.value = true;
+    nextTick(applyEntityHighlight);
+  }
 });
 </script>
 

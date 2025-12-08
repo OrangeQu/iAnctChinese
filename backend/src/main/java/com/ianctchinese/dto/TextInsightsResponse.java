@@ -20,6 +20,7 @@ public class TextInsightsResponse {
   private List<ProcessStep> processCycle;
   private List<String> recommendedViews;
   private String analysisSummary;
+  private String mode;
 
   @Data
   @Builder
