@@ -52,12 +52,17 @@ public class SiliconFlowClient {
   }
 
   public ClassificationPayload classifyText(String textContent, String modelName) {
-    String systemPrompt =
-        "You are a classical-Chinese text classifier. Decide whether the text is warfare, travelogue, biography, or other.";
+    String systemPrompt = """
+        你是一个文言文体裁判定助手，只能输出下列类别之一：
+        warfare（战争纪实）、travelogue（游记地理）、biography（人物传记）、
+        official（官职体系）、agriculture（农书类）、crafts（工艺技术）、other（其他/无法归类）。
+        如果不确定，也必须在上述类别中选最可能的一个，不要输出 unknown。
+        输出需包含类别、置信度和2条中文理由说明。
+        """;
     String userPrompt = """
-        Please return ONLY JSON:
-        {"category":"warfare|travelogue|biography|other","confidence":0-1,"reasons":["reason1","reason2"]}
-        Text:
+        仅输出 JSON（不要多余文字）：
+        {"category":"warfare|travelogue|biography|official|agriculture|crafts|other","confidence":0-1,"reasons":["理由1","理由2"]}
+        文本：
         %s
         """.formatted(textContent);
     try {
