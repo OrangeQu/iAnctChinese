@@ -86,12 +86,13 @@
             <div class="info-section">
               <div class="section-label">👤 相关人物</div>
               <div class="section-content">
-                <span v-if="selectedEvent.participants && selectedEvent.participants.length > 0"
-                      v-for="(person, idx) in selectedEvent.participants"
-                      :key="idx"
-                      class="tag person-tag">
-                  {{ person }}
-                </span>
+                <template v-if="selectedEvent.participants && selectedEvent.participants.length > 0">
+                  <span v-for="(person, idx) in selectedEvent.participants"
+                        :key="idx"
+                        class="tag person-tag">
+                    {{ person }}
+                  </span>
+                </template>
                 <span v-else class="no-data">无</span>
               </div>
             </div>

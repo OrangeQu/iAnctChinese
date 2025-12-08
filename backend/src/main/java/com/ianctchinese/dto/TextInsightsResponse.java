@@ -16,6 +16,8 @@ public class TextInsightsResponse {
   private List<MapPathPoint> mapPoints;
   private List<BattleEvent> battleTimeline;
   private List<FamilyNode> familyTree;
+  private List<OfficialNode> officialTree;
+  private List<ProcessStep> processCycle;
   private List<String> recommendedViews;
   private String analysisSummary;
 
@@ -80,5 +82,31 @@ public class TextInsightsResponse {
     private String name;
     private String relation;
     private List<FamilyNode> children;
+  }
+
+  @Data
+  @Builder
+  public static class OfficialNode {
+
+    private String name;
+    private String position;
+    private String level;
+    private String department;
+    private List<OfficialNode> subordinates;
+    private String description;
+  }
+
+  @Data
+  @Builder
+  public static class ProcessStep {
+
+    private String name;
+    private String description;
+    private Integer sequence;
+    private String category;
+    private List<String> tools;
+    private List<String> materials;
+    private String output;
+    private Integer duration;
   }
 }

@@ -8,6 +8,8 @@ import com.ianctchinese.dto.TextInsightsResponse;
 import com.ianctchinese.dto.TextInsightsResponse.BattleEvent;
 import com.ianctchinese.dto.TextInsightsResponse.FamilyNode;
 import com.ianctchinese.dto.TextInsightsResponse.MapPathPoint;
+import com.ianctchinese.dto.TextInsightsResponse.OfficialNode;
+import com.ianctchinese.dto.TextInsightsResponse.ProcessStep;
 import com.ianctchinese.dto.TextInsightsResponse.Stats;
 import com.ianctchinese.dto.TextInsightsResponse.TimelineEvent;
 import com.ianctchinese.dto.TextInsightsResponse.WordCloudItem;
@@ -56,12 +58,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class AnalysisServiceImpl implements AnalysisService {
 
-  private static final Map<String, String> CATEGORY_LABELS = Map.of(
-      "warfare", "战争纪实",
-      "travelogue", "游记地理",
-      "biography", "人物传记",
-      "other", "其他",
-      "unknown", "综合待识别"
+  private static final Map<String, String> CATEGORY_LABELS = Map.ofEntries(
+      Map.entry("warfare", "战争纪实"),
+      Map.entry("travelogue", "游记地理"),
+      Map.entry("biography", "人物传记"),
+      Map.entry("official", "官职体系"),
+      Map.entry("agriculture", "农书类"),
+      Map.entry("crafts", "工艺技术"),
+      Map.entry("other", "其他"),
+      Map.entry("unknown", "综合待识别")
   );
 
   private final TextDocumentRepository textDocumentRepository;
@@ -107,6 +112,8 @@ public class AnalysisServiceImpl implements AnalysisService {
     List<String> recommendedViews = buildRecommendedViews(text.getCategory());
     List<BattleEvent> battleTimeline = buildBattleTimeline(text.getCategory());
     List<FamilyNode> familyTree = buildFamilyTree(text.getCategory(), entities, relations);
+    List<OfficialNode> officialTree = buildOfficialTree(text.getCategory(), text.getContent(), entities, relations);
+    List<ProcessStep> processCycle = buildProcessCycle(text.getCategory(), text.getContent(), entities, relations);
 
     return TextInsightsResponse.builder()
         .textId(textId)
@@ -117,6 +124,8 @@ public class AnalysisServiceImpl implements AnalysisService {
         .mapPoints(mapPoints)
         .battleTimeline(battleTimeline)
         .familyTree(familyTree)
+        .officialTree(officialTree)
+        .processCycle(processCycle)
         .recommendedViews(recommendedViews)
         .analysisSummary(buildAnalysisSummary(text, stats))
         .build();
@@ -396,6 +405,9 @@ public class AnalysisServiceImpl implements AnalysisService {
     scores.put("warfare", countKeywords(content, List.of("战", "兵", "攻", "军", "将", "敌", "阵", "戎")));
     scores.put("travelogue", countKeywords(content, List.of("山", "水", "江", "河", "湖", "舟", "行", "游", "路", "岭", "津")));
     scores.put("biography", countKeywords(content, List.of("生", "卒", "字", "号", "君", "父", "母", "兄", "子", "仕", "官", "谥", "年")));
+    scores.put("official", countKeywords(content, List.of("官", "职", "尚书", "御史", "太守", "知府", "刺史", "令", "丞", "郎", "侍", "阁", "部", "司")));
+    scores.put("agriculture", countKeywords(content, List.of("田", "种", "耕", "播", "收", "稼", "穑", "农", "桑", "蚕", "丝", "麦", "稻", "谷", "粮", "肥")));
+    scores.put("crafts", countKeywords(content, List.of("工", "匠", "制", "造", "铸", "锻", "织", "染", "烧", "炼", "器", "具", "技", "法", "术")));
 
     Entry<String, Integer> best = scores.entrySet().stream()
         .max(Map.Entry.comparingByValue())
@@ -430,7 +442,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     }
     String normalized = category.toLowerCase(Locale.ROOT);
     return switch (normalized) {
-      case "warfare", "travelogue", "biography", "other" -> normalized;
+      case "warfare", "travelogue", "biography", "official", "agriculture", "crafts", "other" -> normalized;
       case "unknown" -> Optional.ofNullable(fallback).orElse("other");
       default -> Optional.ofNullable(fallback).orElse("other");
     };
@@ -532,6 +544,10 @@ public class AnalysisServiceImpl implements AnalysisService {
     String category = text.getCategory();
     String content = text.getContent();
 
+    // 限制历史影响分析的次数以加快速度（只分析前5个事件）
+    int maxImpactAnalysis = 5;
+    int impactAnalysisCount = 0;
+
     // 1. 从EVENT类型的实体中提取事件
     List<EntityAnnotation> eventEntities = entities.stream()
         .filter(e -> e.getCategory() == EntityCategory.EVENT)
@@ -560,15 +576,18 @@ public class AnalysisServiceImpl implements AnalysisService {
       // 计算重要度
       Integer significance = calculateSignificance(event, relations);
 
-      // 使用大模型分析历史影响
-      log.debug("Analyzing impact for event '{}' in category '{}'", event.getLabel(), category);
-      String impact = analyzeEventImpactWithRetry(event, eventText, content, category);
-      // 如果没有历史影响，设置为"无"
-      if (impact == null || impact.trim().isEmpty()) {
-        log.debug("Event '{}' has no impact analysis, using fallback '无'", event.getLabel());
-        impact = "无";
-      } else {
-        log.debug("Event '{}' impact: {}", event.getLabel(), impact);
+      // 只对前几个事件使用大模型分析历史影响（加快速度）
+      String impact = "无";
+      if (impactAnalysisCount < maxImpactAnalysis) {
+        log.debug("Analyzing impact for event '{}' in category '{}'", event.getLabel(), category);
+        impact = analyzeEventImpactWithRetry(event, eventText, content, category);
+        if (impact == null || impact.trim().isEmpty()) {
+          log.debug("Event '{}' has no impact analysis, using fallback '无'", event.getLabel());
+          impact = "无";
+        } else {
+          log.debug("Event '{}' impact: {}", event.getLabel(), impact);
+          impactAnalysisCount++;
+        }
       }
 
       events.add(TimelineEvent.builder()
@@ -632,17 +651,8 @@ public class AnalysisServiceImpl implements AnalysisService {
 
           String eventType = determineEventTypeFromRelation(relation, category);
 
-          // 对于从关系构建的事件，也尝试分析历史影响
-          String contextText = extractContext(content, source.getStartOffset(), source.getEndOffset(), 150);
-          String impact = siliconFlowClient.analyzeEventImpact(
-              title,
-              description,
-              contextText,
-              category
-          );
-          if (impact == null || impact.trim().isEmpty()) {
-            impact = generateBasicImpact(source, description, category);
-          }
+          // 跳过历史影响分析以加快速度
+          String impact = generateBasicImpact(source, description, category);
           if (impact == null || impact.trim().isEmpty()) {
             impact = "无";
           }
@@ -1228,6 +1238,8 @@ public class AnalysisServiceImpl implements AnalysisService {
     return switch (category) {
       case "travelogue" -> List.of("地图", "时间轴", "词云");
       case "biography" -> List.of("时间轴", "亲情树", "知识图谱");
+      case "official" -> List.of("官职树", "知识图谱", "时间轴");
+      case "agriculture", "crafts" -> List.of("流程周期", "知识图谱", "词云");
       default -> List.of("知识图谱", "对抗视图", "统计图表");
     };
   }
@@ -1240,6 +1252,471 @@ public class AnalysisServiceImpl implements AnalysisService {
         stats.getEntityCount(),
         stats.getRelationCount(),
         String.join(" / ", buildRecommendedViews(text.getCategory())));
+  }
+
+  /**
+   * 构建官职体系树状图
+   * 使用大模型分析文本中的官职信息
+   */
+  private List<OfficialNode> buildOfficialTree(String category, String content, List<EntityAnnotation> entities, List<RelationAnnotation> relations) {
+    if (!"official".equals(category)) {
+      return Collections.emptyList();
+    }
+
+    // 1. 筛选出人物实体
+    List<EntityAnnotation> persons = entities.stream()
+        .filter(e -> e.getCategory() == EntityCategory.PERSON)
+        .collect(Collectors.toList());
+
+    if (persons.isEmpty()) {
+      return Collections.emptyList();
+    }
+
+    // 2. 使用大模型分析官职信息
+    List<String> personNames = persons.stream()
+        .map(EntityAnnotation::getLabel)
+        .collect(Collectors.toList());
+
+    com.fasterxml.jackson.databind.JsonNode analysisResult = null;
+    try {
+      analysisResult = siliconFlowClient.analyzeOfficialPositions(content, personNames, null);
+    } catch (Exception ex) {
+      log.warn("Failed to analyze official positions with LLM: {}", ex.getMessage());
+    }
+
+    // 3. 构建官职节点映射
+    Map<String, OfficialNodeBuilder> nodeMap = new HashMap<>();
+
+    // 从大模型结果中提取官职信息
+    if (analysisResult != null && analysisResult.has("officials") && analysisResult.get("officials").isArray()) {
+      analysisResult.get("officials").forEach(official -> {
+        String name = official.path("name").asText("");
+        String position = official.path("position").asText("");
+        String level = official.path("level").asText("未定品");
+        String department = official.path("department").asText("中央机构");
+        String description = official.path("description").asText("");
+        String superior = official.path("superior").asText(null);
+
+        // 只添加有明确官职的人物
+        if (!name.isEmpty() && !position.isEmpty() && !position.equals("未知官职")) {
+          OfficialNodeBuilder builder = new OfficialNodeBuilder(name, position, level, department);
+          builder.setDescription(description);
+          if (superior != null && !superior.isEmpty()) {
+            builder.setSuperiorName(superior);
+          }
+          nodeMap.put(name, builder);
+        }
+      });
+    }
+
+    // 如果大模型没有返回结果，使用启发式方法
+    if (nodeMap.isEmpty()) {
+      for (EntityAnnotation person : persons) {
+        String name = person.getLabel();
+        String position = extractOfficialPosition(person, relations);
+
+        // 过滤掉"未知官职"
+        if (position != null && !position.equals("未知官职") && !position.equals("部门")) {
+          String level = determineOfficialLevel(position);
+          String department = extractDepartment(position);
+          nodeMap.put(name, new OfficialNodeBuilder(name, position, level, department));
+        }
+      }
+    }
+
+    if (nodeMap.isEmpty()) {
+      return Collections.emptyList();
+    }
+
+    // 4. 构建上下级关系
+    // 首先处理大模型识别的上下级关系
+    for (OfficialNodeBuilder builder : nodeMap.values()) {
+      String superiorName = builder.getSuperiorName();
+      if (superiorName != null && nodeMap.containsKey(superiorName)) {
+        OfficialNodeBuilder superior = nodeMap.get(superiorName);
+        superior.addSubordinate(builder);
+        builder.markAsSubordinate();
+      }
+    }
+
+    // 然后处理从关系中识别的上下级关系（PART_OF关系）
+    for (RelationAnnotation relation : relations) {
+      if (relation.getRelationType() == RelationType.PART_OF &&
+          relation.getSource() != null && relation.getTarget() != null) {
+
+        String subordinateName = relation.getSource().getLabel();
+        String superiorName = relation.getTarget().getLabel();
+
+        if (nodeMap.containsKey(subordinateName) && nodeMap.containsKey(superiorName)) {
+          OfficialNodeBuilder superior = nodeMap.get(superiorName);
+          OfficialNodeBuilder subordinate = nodeMap.get(subordinateName);
+          if (!subordinate.isSubordinate()) {  // 避免重复添加
+            superior.addSubordinate(subordinate);
+            subordinate.markAsSubordinate();
+          }
+        }
+      }
+    }
+
+    // 5. 找出根节点（高级官员）
+    List<OfficialNode> roots = new ArrayList<>();
+    for (OfficialNodeBuilder builder : nodeMap.values()) {
+      if (!builder.isSubordinate()) {
+        roots.add(builder.build());
+      }
+    }
+
+    // 6. 如果没有明确的层级关系，按官职等级排序返回
+    if (roots.isEmpty() || roots.stream().allMatch(n -> n.getSubordinates() == null || n.getSubordinates().isEmpty())) {
+      return nodeMap.values().stream()
+          .sorted((a, b) -> compareOfficialLevel(a.getLevel(), b.getLevel()))
+          .limit(10)
+          .map(OfficialNodeBuilder::build)
+          .collect(Collectors.toList());
+    }
+
+    return roots;
+  }
+
+  /**
+   * 官职节点构建器
+   */
+  private static class OfficialNodeBuilder {
+    private final String name;
+    private final String position;
+    private final String level;
+    private final String department;
+    private String description;
+    private String superiorName;
+    private final List<OfficialNodeBuilder> subordinates = new ArrayList<>();
+    private boolean isSubordinateNode = false;
+
+    public OfficialNodeBuilder(String name, String position, String level, String department) {
+      this.name = name;
+      this.position = position;
+      this.level = level;
+      this.department = department;
+    }
+
+    public void setDescription(String description) {
+      this.description = description;
+    }
+
+    public void setSuperiorName(String superiorName) {
+      this.superiorName = superiorName;
+    }
+
+    public String getSuperiorName() {
+      return superiorName;
+    }
+
+    public void addSubordinate(OfficialNodeBuilder subordinate) {
+      subordinates.add(subordinate);
+    }
+
+    public void markAsSubordinate() {
+      this.isSubordinateNode = true;
+    }
+
+    public boolean isSubordinate() {
+      return isSubordinateNode;
+    }
+
+    public String getLevel() {
+      return level;
+    }
+
+    public OfficialNode build() {
+      String finalDescription = (description != null && !description.isEmpty())
+          ? description
+          : String.format("%s任%s，隶属%s", name, position, department);
+
+      return OfficialNode.builder()
+          .name(name)
+          .position(position)
+          .level(level)
+          .department(department)
+          .subordinates(subordinates.stream()
+              .map(OfficialNodeBuilder::build)
+              .collect(Collectors.toList()))
+          .description(finalDescription)
+          .build();
+    }
+  }
+
+  /**
+   * 从实体和关系中提取官职
+   */
+  private String extractOfficialPosition(EntityAnnotation entity, List<RelationAnnotation> relations) {
+    // 从关系描述中提取官职信息
+    for (RelationAnnotation relation : relations) {
+      if ((relation.getSource() != null && relation.getSource().getId().equals(entity.getId())) ||
+          (relation.getTarget() != null && relation.getTarget().getId().equals(entity.getId()))) {
+
+        String evidence = relation.getEvidence();
+        if (evidence != null) {
+          // 匹配常见官职名称
+          Pattern pattern = Pattern.compile("(太守|刺史|尚书|御史|知府|知县|县令|县丞|主簿|郎中|员外郎|侍郎|给事中|翰林|学士|大学士|阁老|宰相|丞相|太师|太傅|太保|司马|司徒|司空|都督|总兵|参将|游击|守备)");
+          Matcher matcher = pattern.matcher(evidence);
+          if (matcher.find()) {
+            return matcher.group(1);
+          }
+        }
+      }
+    }
+
+    // 如果没有找到，使用默认值
+    return entity.getCategory() == EntityCategory.ORGANIZATION ? "部门" : "未知官职";
+  }
+
+  /**
+   * 确定官职等级
+   */
+  private String determineOfficialLevel(String position) {
+    if (position.contains("宰相") || position.contains("丞相") || position.contains("太师") ||
+        position.contains("太傅") || position.contains("太保") || position.contains("大学士")) {
+      return "一品";
+    } else if (position.contains("尚书") || position.contains("都督") || position.contains("总兵")) {
+      return "二品";
+    } else if (position.contains("侍郎") || position.contains("御史") || position.contains("参将")) {
+      return "三品";
+    } else if (position.contains("郎中") || position.contains("员外郎") || position.contains("游击")) {
+      return "四品";
+    } else if (position.contains("给事中") || position.contains("主簿") || position.contains("守备")) {
+      return "五品";
+    } else if (position.contains("知府") || position.contains("刺史")) {
+      return "四品";
+    } else if (position.contains("知县") || position.contains("县令")) {
+      return "七品";
+    } else if (position.contains("县丞")) {
+      return "八品";
+    }
+    return "未定品";
+  }
+
+  /**
+   * 提取部门信息
+   */
+  private String extractDepartment(String position) {
+    if (position.contains("尚书")) return "六部";
+    if (position.contains("御史")) return "都察院";
+    if (position.contains("翰林") || position.contains("学士")) return "翰林院";
+    if (position.contains("府") || position.contains("州") || position.contains("县")) return "地方政府";
+    if (position.contains("军") || position.contains("兵") || position.contains("都督") || position.contains("总兵")) return "军事系统";
+    return "中央机构";
+  }
+
+  /**
+   * 比较官职等级
+   */
+  private int compareOfficialLevel(String level1, String level2) {
+    Map<String, Integer> levelMap = Map.of(
+        "一品", 1, "二品", 2, "三品", 3, "四品", 4, "五品", 5,
+        "六品", 6, "七品", 7, "八品", 8, "九品", 9, "未定品", 10
+    );
+    return Integer.compare(
+        levelMap.getOrDefault(level1, 10),
+        levelMap.getOrDefault(level2, 10)
+    );
+  }
+
+  /**
+   * 构建流程周期图（用于农书和工艺类文本）
+   */
+  private List<ProcessStep> buildProcessCycle(String category, String content, List<EntityAnnotation> entities, List<RelationAnnotation> relations) {
+    if (!"agriculture".equals(category) && !"crafts".equals(category)) {
+      return Collections.emptyList();
+    }
+
+    List<ProcessStep> steps = new ArrayList<>();
+
+    // 1. 从EVENT类型实体中提取流程步骤
+    List<EntityAnnotation> eventEntities = entities.stream()
+        .filter(e -> e.getCategory() == EntityCategory.EVENT)
+        .sorted((a, b) -> Integer.compare(a.getStartOffset(), b.getStartOffset()))
+        .collect(Collectors.toList());
+
+    int sequence = 1;
+    for (EntityAnnotation event : eventEntities) {
+      String stepName = event.getLabel();
+      String description = extractText(content, event.getStartOffset(), event.getEndOffset());
+      String stepCategory = determineStepCategory(stepName, category);
+
+      // 提取相关的工具和材料
+      List<String> tools = extractTools(event, relations, entities, content);
+      List<String> materials = extractMaterials(event, relations, entities, content);
+      String output = extractOutput(event, relations, entities);
+
+      steps.add(ProcessStep.builder()
+          .name(stepName)
+          .description(description)
+          .sequence(sequence++)
+          .category(stepCategory)
+          .tools(tools)
+          .materials(materials)
+          .output(output)
+          .duration(estimateDuration(stepName, category))
+          .build());
+    }
+
+    // 2. 如果没有EVENT实体，使用默认流程
+    if (steps.isEmpty()) {
+      steps.addAll(buildDefaultProcessSteps(category));
+    }
+
+    return steps;
+  }
+
+  /**
+   * 确定步骤类别
+   */
+  private String determineStepCategory(String stepName, String category) {
+    if ("agriculture".equals(category)) {
+      if (stepName.contains("耕") || stepName.contains("翻")) return "整地";
+      if (stepName.contains("播") || stepName.contains("种")) return "播种";
+      if (stepName.contains("灌") || stepName.contains("浇")) return "灌溉";
+      if (stepName.contains("施肥") || stepName.contains("粪")) return "施肥";
+      if (stepName.contains("除草") || stepName.contains("锄")) return "田间管理";
+      if (stepName.contains("收") || stepName.contains("割")) return "收获";
+      return "其他";
+    } else if ("crafts".equals(category)) {
+      if (stepName.contains("选") || stepName.contains("备")) return "选材";
+      if (stepName.contains("切") || stepName.contains("削") || stepName.contains("裁")) return "加工";
+      if (stepName.contains("组装") || stepName.contains("拼")) return "组装";
+      if (stepName.contains("打磨") || stepName.contains("修")) return "修整";
+      if (stepName.contains("涂") || stepName.contains("漆") || stepName.contains("染")) return "装饰";
+      if (stepName.contains("烧") || stepName.contains("炼") || stepName.contains("铸")) return "热处理";
+      return "制作";
+    }
+    return "步骤";
+  }
+
+  /**
+   * 提取工具信息
+   */
+  private List<String> extractTools(EntityAnnotation event, List<RelationAnnotation> relations, List<EntityAnnotation> entities, String content) {
+    List<String> tools = new ArrayList<>();
+
+    // 从关系中查找工具
+    for (RelationAnnotation relation : relations) {
+      if (relation.getSource() != null && relation.getSource().getId().equals(event.getId())) {
+        EntityAnnotation target = relation.getTarget();
+        if (target != null && target.getCategory() == EntityCategory.OBJECT) {
+          tools.add(target.getLabel());
+        }
+      }
+    }
+
+    // 从周围文本中提取常见工具名称
+    String context = extractContext(content, event.getStartOffset(), event.getEndOffset(), 50);
+    Pattern toolPattern = Pattern.compile("(锄|犁|镰|耙|锹|铲|斧|锯|锤|凿|刨|钻|针|剪|刀|笔|砚)");
+    Matcher matcher = toolPattern.matcher(context);
+    while (matcher.find() && tools.size() < 3) {
+      String tool = matcher.group(1);
+      if (!tools.contains(tool)) {
+        tools.add(tool);
+      }
+    }
+
+    return tools.isEmpty() ? List.of("无") : tools;
+  }
+
+  /**
+   * 提取材料信息
+   */
+  private List<String> extractMaterials(EntityAnnotation event, List<RelationAnnotation> relations, List<EntityAnnotation> entities, String content) {
+    List<String> materials = new ArrayList<>();
+
+    String context = extractContext(content, event.getStartOffset(), event.getEndOffset(), 50);
+
+    // 农业材料
+    Pattern agriPattern = Pattern.compile("(种子|秧苗|粪肥|水|土|稻|麦|粟|豆|菜)");
+    Matcher agriMatcher = agriPattern.matcher(context);
+    while (agriMatcher.find() && materials.size() < 3) {
+      String material = agriMatcher.group(1);
+      if (!materials.contains(material)) {
+        materials.add(material);
+      }
+    }
+
+    // 工艺材料
+    Pattern craftPattern = Pattern.compile("(木|竹|石|铁|铜|布|丝|纸|泥|陶|瓷)");
+    Matcher craftMatcher = craftPattern.matcher(context);
+    while (craftMatcher.find() && materials.size() < 3) {
+      String material = craftMatcher.group(1);
+      if (!materials.contains(material)) {
+        materials.add(material);
+      }
+    }
+
+    return materials.isEmpty() ? List.of("无") : materials;
+  }
+
+  /**
+   * 提取输出产品
+   */
+  private String extractOutput(EntityAnnotation event, List<RelationAnnotation> relations, List<EntityAnnotation> entities) {
+    // 从关系中查找输出
+    for (RelationAnnotation relation : relations) {
+      if (relation.getSource() != null && relation.getSource().getId().equals(event.getId()) &&
+          relation.getRelationType() == RelationType.CAUSE) {
+        EntityAnnotation target = relation.getTarget();
+        if (target != null) {
+          return target.getLabel();
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 估算步骤耗时（天数）
+   */
+  private Integer estimateDuration(String stepName, String category) {
+    if ("agriculture".equals(category)) {
+      if (stepName.contains("播种")) return 3;
+      if (stepName.contains("耕地")) return 5;
+      if (stepName.contains("收获")) return 7;
+      if (stepName.contains("施肥")) return 2;
+      return 1;
+    } else if ("crafts".equals(category)) {
+      if (stepName.contains("选材")) return 1;
+      if (stepName.contains("加工")) return 3;
+      if (stepName.contains("打磨")) return 2;
+      if (stepName.contains("装饰")) return 2;
+      return 1;
+    }
+    return 1;
+  }
+
+  /**
+   * 构建默认流程步骤
+   */
+  private List<ProcessStep> buildDefaultProcessSteps(String category) {
+    if ("agriculture".equals(category)) {
+      return List.of(
+          ProcessStep.builder().name("整地").description("翻耕土地，清除杂草").sequence(1)
+              .category("整地").tools(List.of("犁", "耙")).materials(List.of("土")).duration(5).build(),
+          ProcessStep.builder().name("播种").description("选良种，按节气播种").sequence(2)
+              .category("播种").tools(List.of("锄")).materials(List.of("种子")).output("秧苗").duration(3).build(),
+          ProcessStep.builder().name("田间管理").description("灌溉、施肥、除草").sequence(3)
+              .category("田间管理").tools(List.of("锄", "桶")).materials(List.of("水", "肥")).duration(30).build(),
+          ProcessStep.builder().name("收获").description("成熟后收割晾晒").sequence(4)
+              .category("收获").tools(List.of("镰刀")).output("谷物").duration(7).build()
+      );
+    } else if ("crafts".equals(category)) {
+      return List.of(
+          ProcessStep.builder().name("选材").description("挑选优质原料").sequence(1)
+              .category("选材").materials(List.of("木材")).duration(1).build(),
+          ProcessStep.builder().name("粗加工").description("裁切、刨削成型").sequence(2)
+              .category("加工").tools(List.of("锯", "刨")).materials(List.of("木材")).duration(3).build(),
+          ProcessStep.builder().name("精修").description("打磨光滑，修整细节").sequence(3)
+              .category("修整").tools(List.of("砂纸", "锉")).duration(2).build(),
+          ProcessStep.builder().name("装饰").description("涂漆或雕花装饰").sequence(4)
+              .category("装饰").tools(List.of("刷", "刀")).materials(List.of("漆")).output("成品").duration(2).build()
+      );
+    }
+    return Collections.emptyList();
   }
 
   private List<AnnotationEntity> buildHeuristicEntities(String content) {

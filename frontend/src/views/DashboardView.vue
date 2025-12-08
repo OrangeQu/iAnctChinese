@@ -182,6 +182,8 @@ import BattleTimelineView from "@/components/visualizations/BattleTimelineView.v
 import TextWorkspace from "./TextWorkspace.vue";
 import WordCloudCanvas from "@/components/visualizations/WordCloudCanvas.vue";
 import HistoryMap from "@/components/visualizations/MapView.vue";
+import OfficialTreeView from "@/components/visualizations/OfficialTreeView.vue";
+import ProcessCycleView from "@/components/visualizations/ProcessCycleView.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -212,6 +214,10 @@ const labelMap = {
   warfare: "战争纪实",
   travelogue: "游记地理",
   biography: "人物传记",
+  official: "官职体系",
+  agriculture: "农书类",
+  crafts: "工艺技术",
+  other: "其他",
   unknown: "待识别"
 };
 
@@ -255,13 +261,28 @@ const viewPresets = {
     { value: "graph", label: "知识图谱" }
   ],
   warfare: [
-    { value: "historyMap", label: "战争地图" }, 
+    { value: "historyMap", label: "战争地图" },
     { value: "graph", label: "知识图谱" }
   ],
   biography: [
     { value: "family", label: "亲情图" },
     { value: "timeline", label: "生平时间轴" },
     { value: "graph", label: "知识图谱" }
+  ],
+  official: [
+    { value: "officialTree", label: "官职树" },
+    { value: "graph", label: "知识图谱" },
+    { value: "timeline", label: "时间轴" }
+  ],
+  agriculture: [
+    { value: "processCycle", label: "农事流程" },
+    { value: "graph", label: "知识图谱" },
+    { value: "cloud", label: "词云" }
+  ],
+  crafts: [
+    { value: "processCycle", label: "工艺流程" },
+    { value: "graph", label: "知识图谱" },
+    { value: "cloud", label: "词云" }
   ],
   default: [
     { value: "graph", label: "知识图谱" },
@@ -290,7 +311,9 @@ const componentMap = {
   historyMap: HistoryMap,
   family: FamilyTreeView,
   battle: BattleTimelineView,
-  cloud: WordCloudCanvas
+  cloud: WordCloudCanvas,
+  officialTree: OfficialTreeView,
+  processCycle: ProcessCycleView
 };
 
 const currentComponent = computed(() => componentMap[viewType.value] || GraphView);
@@ -299,7 +322,7 @@ const insights = computed(() => store.insights);
 const viewProps = computed(() => {
   switch (viewType.value) {
     case "historyMap":
-      return { 
+      return {
         locations: (store.entities || []).filter((e) => e.category === "LOCATION"),
         points: insights.value?.mapPoints || [],
         allEntities: store.entities || []
@@ -312,7 +335,7 @@ const viewProps = computed(() => {
     };
     case "map": {
       const locs = (store.entities || []).filter((e) => e.category === "LOCATION");
-      return { 
+      return {
         locations: locs.length ? locs : (store.entities || []), // 若无LOCATION，则回退全部实体尝试定位
         points: insights.value?.mapPoints || [],
         allEntities: store.entities || []
@@ -320,6 +343,11 @@ const viewProps = computed(() => {
     }
     case "battle": return { events: insights.value?.battleTimeline || [] };
     case "family": return { nodes: insights.value?.familyTree || [] };
+    case "officialTree": return { nodes: insights.value?.officialTree || [] };
+    case "processCycle": return {
+      steps: insights.value?.processCycle || [],
+      category: store.selectedText?.category || 'crafts'
+    };
     case "graph":
     default:
       return {

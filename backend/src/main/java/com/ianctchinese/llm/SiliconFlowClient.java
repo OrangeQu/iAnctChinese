@@ -44,8 +44,8 @@ public class SiliconFlowClient {
   private RestTemplate restTemplate() {
     if (restTemplate == null) {
       restTemplate = restTemplateBuilder
-          .setConnectTimeout(Duration.ofSeconds(30))
-          .setReadTimeout(Duration.ofSeconds(90))
+          .setConnectTimeout(Duration.ofSeconds(15))
+          .setReadTimeout(Duration.ofSeconds(60))
           .build();
     }
     return restTemplate;
@@ -81,28 +81,18 @@ public class SiliconFlowClient {
   }
 
   public AnnotationPayload annotateText(String textContent, String modelName) {
+    // 限制文本长度以加快分析
+    String limitedContent = textContent.length() > 3000
+        ? textContent.substring(0, 3000) + "..."
+        : textContent;
+
     String systemPrompt = """
-        You are a classical-Chinese IE assistant. First infer the coarse genre (warfare / travelogue / biography / essay-or-other) and then emphasize the corresponding schema, but output entities/relations ONLY with these categories:
+        You are a classical-Chinese IE assistant. Extract entities and relations.
         Entities: PERSON, LOCATION, EVENT, ORGANIZATION, OBJECT, CUSTOM.
         Relations: FAMILY, ALLY, SUPPORT, RIVAL, CONFLICT, MENTOR, INFLUENCE, LOCATION_OF, PART_OF, CAUSE, TEMPORAL, TRAVEL, CUSTOM.
-
-        Genre emphasis (guide the model to extract more, without changing categories):
-        - warfare: prioritize battles, marches, sieges, commanders, armies, strongholds, decrees, alliances. Extract more relations of RIVAL/ALLY/PART_OF/LOCATION_OF/COMMAND-like (map to existing types).
-        - travelogue: prioritize routes, places visited, landmarks, scenery, guides/hosts; relations of ROUTE/LOCATION_OF/DESCRIBES (map to LOCATION_OF/INFLUENCE).
-        - biography: prioritize offices/appointments, patrons, rivals, praise/criticism, major life events; relations of MENTOR/FAMILY/ALLY/RIVAL/INFLUENCE/PART_OF/LOCATION_OF.
-        - essay/misc: prioritize key people/places/events mentioned, analogies, causes; relations of CAUSE/INFLUENCE/DESCRIBES mapped to available types.
-
-        Requirements:
-        1) Every entity must include startOffset/endOffset (UTF-8 character index into the original text). If you cannot locate a span, DO NOT return that entity.
-        2) Prefer specific categories; use CUSTOM only when none fits.
-        3) Aim for >=12 entities and >=8 relations if the text allows; relations must reference existing entity labels, do not invent labels.
-        4) Labels concise (<=10 chars), confidence 0-1.
-        5) WordCloud: 12 short tokens (2-6 chars), weight 0.3-1, no full sentences.
-        6) Sentences: 6 suggestions with original/punctuated/summary.
-        Return STRICT JSON. If unsure of offset, drop the item.
         """;
     String userPrompt = """
-        Output ONLY JSON in this shape:
+        Output JSON:
         {
           "entities":[{"label":"","category":"PERSON|LOCATION|EVENT|ORGANIZATION|OBJECT|CUSTOM","startOffset":0,"endOffset":0,"confidence":0.8}],
           "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|SUPPORT|RIVAL|CONFLICT|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|TEMPORAL|TRAVEL|CUSTOM","confidence":0.7,"description":""}],
@@ -111,7 +101,7 @@ public class SiliconFlowClient {
         }
         Text:
         %s
-        """.formatted(textContent);
+        """.formatted(limitedContent);
     try {
       JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
       if (node == null) {
@@ -174,7 +164,7 @@ public class SiliconFlowClient {
   }
 
   /**
-   * 让大模型分析事件的历史影响
+   * 让大模型分析事件的历史影响（优化版，更快）
    * @param eventTitle 事件标题
    * @param eventDescription 事件描述
    * @param context 事件上下文
@@ -182,54 +172,39 @@ public class SiliconFlowClient {
    * @return 历史影响分析结果（简短，不超过80字）
    */
   public String analyzeEventImpact(String eventTitle, String eventDescription, String context, String category) {
-    String systemPrompt = """
-        你是一位分析中国古代历史事件的专家。请分析给定事件的历史影响或意义。
-        要求：
-        1. 回答必须是中文，50-80字
-        2. 重点分析该事件对人物、政治、军事或文化的实际影响
-        3. 即使是小事件也要尽量分析其意义，不要说"不重要"
-        4. 语言简洁、客观
-        """;
+    String systemPrompt = "你是历史分析专家。用50-80字分析事件的历史影响。只返回JSON。";
 
     String categoryHint = switch (category) {
-      case "biography" -> "这是人物传记中的事件。分析该事件如何影响人物的仕途、声望或历史地位。";
-      case "warfare" -> "这是军事记录中的事件。分析该战役或军事行动的战略意义和政治后果。";
-      case "travelogue" -> "这是游记中的事件。分析该地点或旅程的文化、地理或历史意义。";
-      default -> "分析该事件的历史或文化意义。";
+      case "biography" -> "分析对人物仕途或声望的影响";
+      case "warfare" -> "分析战略意义和政治后果";
+      case "travelogue" -> "分析文化地理意义";
+      default -> "分析历史意义";
     };
+
+    // 缩短上下文以加快分析
+    String shortContext = (context != null && context.length() > 100)
+        ? context.substring(0, 100)
+        : context;
 
     String userPrompt = """
         事件：%s
-        描述：%s
-        上下文：%s
-
         %s
 
-        请用50-80字分析该事件的历史影响或意义。
-        返回格式：{"impact":"你的分析内容"}
-        """.formatted(eventTitle, eventDescription,
-                     context != null && context.length() > 200 ? context.substring(0, 200) : context,
-                     categoryHint);
+        返回：{"impact":"50-80字分析"}
+        """.formatted(eventTitle, categoryHint);
 
     try {
       JsonNode node = sendAndParse(systemPrompt, userPrompt, null);
-      log.debug("Event impact analysis for '{}': node={}", eventTitle, node);
 
       if (node != null && node.has("impact")) {
         String impact = node.path("impact").asText("").trim();
-        if (impact.isEmpty()) {
-          log.warn("Event impact for '{}' is empty from model", eventTitle);
-          return null;
+        if (!impact.isEmpty()) {
+          return impact;
         }
-        log.debug("Event impact for '{}': {}", eventTitle, impact);
-        return impact;
-      } else {
-        log.warn("Event impact for '{}': model response missing 'impact' field. Response: {}",
-                 eventTitle, node != null ? node.toString() : "null");
-        return null;
       }
+      return null;
     } catch (Exception ex) {
-      log.warn("SiliconFlow analyzeEventImpact error for '{}': {}", eventTitle, ex.getMessage(), ex);
+      log.debug("Event impact analysis skipped for '{}': {}", eventTitle, ex.getMessage());
       return null;
     }
   }
@@ -336,6 +311,44 @@ public class SiliconFlowClient {
     }
     log.debug("Parsed JSON: {}", json.length() > 500 ? json.substring(0, 500) + "..." : json);
     return objectMapper.readTree(json);
+  }
+
+  /**
+   * 分析文本中的官职体系（优化版，更快）
+   * @param textContent 文本内容
+   * @param persons 人物列表
+   * @param modelName 模型名称
+   * @return 官职分析结果的JSON对象
+   */
+  public JsonNode analyzeOfficialPositions(String textContent, List<String> persons, String modelName) {
+    String systemPrompt = "你是古代官职分析专家。分析文本中人物的官职、品级、部门。只返回JSON，不要额外解释。";
+
+    String personList = persons != null && !persons.isEmpty()
+        ? String.join("、", persons.subList(0, Math.min(persons.size(), 10)))
+        : "（文中人物）";
+
+    // 缩短文本长度以加快分析
+    String shortContent = textContent.length() > 1000 ? textContent.substring(0, 1000) : textContent;
+
+    String userPrompt = """
+        文本：%s
+        人物：%s
+
+        JSON格式：
+        {"officials":[{"name":"姓名","position":"官职","level":"品级","department":"部门","superior":"上级（可选）","description":"描述"}]}
+
+        品级：一品/二品/.../九品
+        部门：六部/都察院/翰林院/地方政府/军事系统/中央机构
+        """.formatted(shortContent, personList);
+
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
+      log.debug("Official positions analysis result: {}", node);
+      return node;
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeOfficialPositions error: {}", ex.getMessage());
+      return null;
+    }
   }
 
   /**
