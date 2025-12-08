@@ -14,10 +14,15 @@
       </div>
     </div>
     <div class="actions">
-      <el-select v-model="selectedCategory" placeholder="调整类型" size="large" style="width: 180px">
+      <el-select v-model="selectedCategory" placeholder="调整类型" size="large" style="width: 220px">
         <el-option label="战争纪实" value="warfare" />
         <el-option label="游记地理" value="travelogue" />
         <el-option label="人物传记" value="biography" />
+        <el-option label="官职体系" value="official" />
+        <el-option label="农书类" value="agriculture" />
+        <el-option label="工艺技术" value="crafts" />
+        <el-option label="其他" value="other" />
+        <el-option label="待识别" value="unknown" />
       </el-select>
       <el-button type="primary" @click="$emit('update-category', selectedCategory)">保存类型</el-button>
       <el-button @click="$emit('classify')" :loading="loading">重新判定</el-button>
@@ -50,6 +55,10 @@ const labelMap = {
   warfare: "战争纪实",
   travelogue: "游记地理",
   biography: "人物传记",
+  official: "官职体系",
+  agriculture: "农书类",
+  crafts: "工艺技术",
+  other: "其他",
   unknown: "待识别"
 };
 

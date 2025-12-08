@@ -35,7 +35,7 @@
     </div>
 
     <!-- 2. 统计分析阶段 -->
-    <div v-else-if="stage === 'analysis'" class="analysis-stage">
+    <div v-else-if="stage === 'analysis'" class="analysis-stage" v-loading="isDataLoading">
       <ClassificationBanner
         :current-category="store.selectedText?.category || ''"
         :classification="store.classification"
@@ -65,7 +65,7 @@
 
     <!-- 3. 知识图谱与可视化阶段 -->
     <div v-else class="graph-stage">
-      <div class="graph-grid">
+      <div class="graph-grid" v-loading="isDataLoading">
         <section class="panel left-panel">
           <div class="property-block">
             <h3 class="section-title">属性面板</h3>
@@ -98,11 +98,11 @@
         
         <!-- 中间主要视图 -->
         <section class="panel view-panel">
-          <div class="view-toggle">
-            <el-radio-group v-model="viewType">
-              <el-radio-button
-                v-for="option in viewOptions"
-                :key="option.value"
+      <div class="view-toggle">
+        <el-radio-group v-model="viewType">
+          <el-radio-button
+            v-for="option in viewOptions"
+            :key="option.value"
                 :label="option.value"
               >
                 {{ option.label }}
@@ -115,12 +115,25 @@
                 {{ view }}
               </el-tag>
             </div>
-          </div>
-          
-          <!-- 动态组件渲染 -->
-          <component 
-            :is="currentComponent" 
-            v-bind="viewProps" 
+        </div>
+        <div class="category-override">
+          <el-select v-model="categoryDraft" placeholder="选择文言文类型" style="width: 220px">
+            <el-option label="战争纪实" value="warfare" />
+            <el-option label="游记地理" value="travelogue" />
+            <el-option label="人物传记" value="biography" />
+            <el-option label="官职体系" value="official" />
+            <el-option label="农书类" value="agriculture" />
+            <el-option label="工艺技术" value="crafts" />
+            <el-option label="其他" value="other" />
+            <el-option label="待识别" value="unknown" />
+          </el-select>
+          <el-button type="primary" size="small" @click="handleSaveCategory">保存类型</el-button>
+        </div>
+
+        <!-- 动态组件渲染 -->
+        <component 
+          :is="currentComponent" 
+          v-bind="viewProps" 
             :key="store.selectedTextId + '-' + viewType"
             ref="viewComponentRef"
           />
@@ -196,6 +209,7 @@ const STORAGE_VIEW_PER_TEXT_KEY = "dashboard-view-per-text";
 
 const stage = ref(localStorage.getItem(STORAGE_STAGE_KEY) || "structure");
 const viewType = ref(localStorage.getItem(STORAGE_VIEW_KEY) || "graph");
+const categoryDraft = ref("");
 const searchDialogVisible = ref(false);
 const viewComponentRef = ref(null);
 
@@ -240,6 +254,8 @@ watch(() => route.params.id, async (id) => {
 // 选中文本后，确保当前视图合法且不抢占已有选择
 watch(() => store.selectedText?.id, async (newId) => {
   if (newId) {
+    // 初始化草稿类别为当前文献类别
+    categoryDraft.value = store.selectedText?.category || "other";
     await nextTick();
     const opts = viewOptions.value;
     const perTextViews = JSON.parse(localStorage.getItem(STORAGE_VIEW_PER_TEXT_KEY) || "{}");
@@ -318,6 +334,13 @@ const componentMap = {
 
 const currentComponent = computed(() => componentMap[viewType.value] || GraphView);
 const insights = computed(() => store.insights);
+const isDataLoading = computed(
+  () =>
+    store.loading &&
+    !store.entities.length &&
+    !store.relations.length &&
+    !store.sections.length
+);
 
 const viewProps = computed(() => {
   switch (viewType.value) {
@@ -374,6 +397,18 @@ const handleFilterChange = (filters) => {
   store.setEntityFilters(filters.entityCategories || []);
   store.setRelationFilters(filters.relationTypes || []);
   store.setHighlightOnly(filters.highlightOnly);
+};
+
+const handleSaveCategory = async () => {
+  if (!categoryDraft.value) return;
+  if (!store.selectedTextId) return;
+  await store.updateSelectedCategory(categoryDraft.value);
+  ElMessage.success("文言文类型已更新");
+  // 类型变更后，重置视图到该类型的第一个预设视图
+  const opts = viewOptions.value;
+  if (opts.length) {
+    viewType.value = opts[0].value;
+  }
 };
 
 const selectFromSearch = async (textId) => {
@@ -441,6 +476,7 @@ const entityColor = (category) => {
 .property-block { background: linear-gradient(180deg, #fffaf1 0%, #fff 80%); border: 1px solid #eadfce; border-radius: 16px; padding: 14px 16px; box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08); }
 .left-panel :deep(.filter-panel) { border: 1px solid #eadfce; background: linear-gradient(180deg, #fffaf1 0%, #fff 80%); box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08); }
 .view-toggle { display: flex; justify-content: space-between; margin-bottom: 12px; }
+.category-override { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
 .analysis-stage .analysis-body { display: grid; grid-template-columns: 260px 1fr; gap: 16px; }
 .chip-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .chip-list li { display: flex; justify-content: space-between; background: rgba(247,244,236,0.9); padding: 6px 12px; border-radius: 999px; font-size: 13px; }

@@ -62,39 +62,31 @@ export const useTextStore = defineStore("textStore", {
       if (!id) {
         return;
       }
+      if (id === this.selectedTextId && this.selectedText) {
+        // 已有当前文档的数据，避免重复请求导致卡顿
+        return;
+      }
       this.selectedTextId = id;
       this.loading = true;
       try {
+        // 先拿正文，尽快渲染基础页面，再异步拉其他数据，避免整页长时间 loading
         const { data: text } = await fetchTextById(id);
         this.selectedText = text;
-        const results = await Promise.allSettled([
+        this.loading = false;
+
+        Promise.allSettled([
           fetchEntities(id),
           fetchRelations(id),
           fetchInsights(id),
           fetchSections(id)
-        ]);
-        if (results[0].status === "fulfilled") {
-          this.entities = results[0].value.data;
-        } else {
-          this.entities = [];
-        }
-        if (results[1].status === "fulfilled") {
-          this.relations = results[1].value.data;
-        } else {
-          this.relations = [];
-        }
-        if (results[2].status === "fulfilled") {
-          this.insights = results[2].value.data;
-        } else {
-          this.insights = null;
-        }
-        if (results[3].status === "fulfilled") {
-          this.sections = results[3].value.data;
-        } else {
-          this.sections = [];
-        }
-        this.filters.entityCategories = [...this.entityOptions];
-        this.filters.relationTypes = [...this.relationOptions];
+        ]).then((results) => {
+          this.entities = results[0].status === "fulfilled" ? results[0].value.data : [];
+          this.relations = results[1].status === "fulfilled" ? results[1].value.data : [];
+          this.insights = results[2].status === "fulfilled" ? results[2].value.data : null;
+          this.sections = results[3].status === "fulfilled" ? results[3].value.data : [];
+          this.filters.entityCategories = [...this.entityOptions];
+          this.filters.relationTypes = [...this.relationOptions];
+        });
       } finally {
         this.loading = false;
       }
