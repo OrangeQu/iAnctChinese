@@ -1,6 +1,8 @@
 <template>
   <div class="documents-page" v-loading="store.loading">
-    <AuthToolbar back-to="/" />
+    <div class="header-bar">
+      <el-button type="default" plain @click="goProjectList"> 返回项目列表</el-button>
+    </div>
     <header class="page-header">
       <div>
         <h1>文档管理</h1>
@@ -38,8 +40,7 @@
         <div class="card-header">
           <span>文档列表</span>
           <div class="card-actions">
-            <el-button type="primary" plain @click="handleCreate">新建文档</el-button>
-            <el-button plain @click="goProjectList">返回项目列表</el-button>
+            <el-button type="primary" @click="handleCreate">新建文档</el-button>
           </div>
         </div>
       </template>
@@ -136,14 +137,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import { Search } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
 import AuthToolbar from "@/components/layout/AuthToolbar.vue";
 
 const router = useRouter();
+const route = useRoute();
 const store = useTextStore();
 const searchInput = ref("");
 const activeKeyword = ref("");
@@ -165,16 +167,23 @@ const editForm = ref({
   era: "",
   content: ""
 });
+const currentProjectId = computed(() => (route.params.projectId ? Number(route.params.projectId) : null));
 
 const createRules = {
   title: [{ required: true, message: "请输入文档名称", trigger: "blur" }]
 };
 
 onMounted(async () => {
-  if (!store.texts.length) {
-    await store.loadTexts();
-  }
+  await store.loadTexts(undefined, currentProjectId.value);
 });
+
+watch(
+  () => route.params.projectId,
+  async (val, oldVal) => {
+    if (val === oldVal) return;
+    await store.loadTexts(undefined, val ? Number(val) : null);
+  }
+);
 
 const filteredDocuments = computed(() => {
   if (!activeKeyword.value) {
@@ -222,7 +231,11 @@ const openDocument = async (text) => {
   try {
     store.selectedTextId = text.id;
     store.selectedText = text;
-    router.push({ name: "text-workspace", params: { id: text.id } });
+    router.push({
+      name: "text-workspace",
+      params: { id: text.id },
+      query: { projectId: currentProjectId.value ?? undefined }
+    });
   } catch (error) {
     console.error("Failed to open document:", error);
     ElMessage.error("加载文档失败");
@@ -284,7 +297,7 @@ const handleCreate = () => {
 };
 
 const goProjectList = () => {
-  ElMessage.info("项目列表功能暂未实现");
+  router.push("/projects");
 };
 
 const handleCreateConfirm = () => {
@@ -297,14 +310,19 @@ const handleCreateConfirm = () => {
         author: createForm.author || undefined,
         era: createForm.era || undefined,
         content: createForm.content || "",
-        description: createForm.description || ""
+        description: createForm.description || "",
+        projectId: currentProjectId.value ?? undefined
       };
       const created = await store.uploadNewText(payload);
       createDialogVisible.value = false;
       if (created?.id) {
         // 确保进入结构标注阶段
         localStorage.setItem("dashboard-stage", "structure");
-        router.push({ name: "text-workspace", params: { id: created.id } });
+        router.push({
+          name: "text-workspace",
+          params: { id: created.id },
+          query: { projectId: currentProjectId.value ?? undefined }
+        });
       }
     } catch (e) {
       ElMessage.error("新建文档失败，请稍后再试");
@@ -323,6 +341,11 @@ const handleCreateConfirm = () => {
   gap: 20px;
   background: #f7f8fc;
   min-height: calc(100vh - 48px);
+}
+
+.header-bar {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .page-header {

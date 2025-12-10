@@ -1,8 +1,8 @@
 import apiClient from "./client";
 
-export const fetchTexts = (category) => {
+export const fetchTexts = (category, projectId) => {
   return apiClient.get("/texts", {
-    params: { category }
+    params: { category, projectId }
   });
 };
 

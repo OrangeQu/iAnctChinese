@@ -41,6 +41,9 @@ public class TextDocument {
   @Column(length = 2048)
   private String description;
 
+  @Column(name = "project_id")
+  private Long projectId;
+
   @Column(nullable = false)
   private String category;
 

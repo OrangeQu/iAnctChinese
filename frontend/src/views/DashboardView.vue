@@ -2,19 +2,21 @@
   <div class="dashboard-shell" v-loading="store.loading">
     <div class="stage-actions">
       <div class="user-menu">
-        <el-dropdown>
-          <span class="user-info">
-            {{ authStore.user?.username || "用户" }}
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="goProfile">个人中心</el-dropdown-item>
-              <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <el-button
+          type="primary"
+          size="large"
+          style="padding: 12px 24px; font-size: 16px"
+          :loading="store.exporting"
+          :disabled="!store.selectedTextId"
+          @click="handleExport"
+        >
+          导出
+        </el-button>
       </div>
+    </div>
+
+    <div class="return-bar">
+      <el-button link type="primary" @click="goBackToDocuments">返回文档管理</el-button>
     </div>
 
     <!-- 阶段导航 -->
@@ -181,7 +183,7 @@ import { computed, onMounted, ref, watch, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
-import { ArrowDown } from "@element-plus/icons-vue";
+import { ArrowDown, User, Right } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 
 // 引入组件
@@ -219,8 +221,21 @@ const handleLogout = () => {
   router.push("/");
 };
 
+const handleExport = () => {
+  store.exportSelectedText();
+};
+
 const goProfile = () => {
   router.push("/profile");
+};
+
+const goBackToDocuments = () => {
+  const projectId = route.query.projectId;
+  if (projectId) {
+    router.push({ name: "project-documents", params: { projectId } });
+  } else {
+    router.push("/documents");
+  }
 };
 
 const stageOptions = [
@@ -492,6 +507,10 @@ const entityColor = (category) => {
 <style scoped>
 .dashboard-shell { display: flex; flex-direction: column; gap: 8px; }
 .stage-actions { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 4px; }
+.return-bar { margin: 6px 0 8px; }
+.user-menu { display: flex; align-items: center; gap: 10px; }
+.icon-circle { background: #f3f4f6; color: #111827; border-color: #e5e7eb; }
+.icon-circle:hover { background: #e5e7eb; color: #0f172a; }
 .stage-nav { display: flex; gap: 12px; margin-bottom: 4px; }
 .stage-btn { padding: 8px 18px; border-radius: 999px; border: 1px solid var(--border); background: white; cursor: pointer; display: flex; gap: 6px; align-items: center;}
 .stage-btn.active { background: #3f3d56; color: white; }

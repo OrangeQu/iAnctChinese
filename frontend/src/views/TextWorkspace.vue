@@ -4,7 +4,6 @@
       <aside class="panel text-panel">
         <div class="panel-head">
           <h3 class="section-title">原文</h3>
-          <el-button link @click="goBackToDocuments">返回文档管理</el-button>
         </div>
         <div class="editor-toolbar" v-if="editor">
           <div class="toolbar-left">
@@ -69,9 +68,6 @@
         <div class="annotation-section">
           <h3 class="section-title">实体标注</h3>
           <el-form :model="entityForm" inline class="form-inline">
-            <el-form-item label="名称">
-              <el-input v-model="entityForm.label" placeholder="例：周瑜" style="width: 180px" />
-            </el-form-item>
             <el-form-item label="类别">
               <el-select v-model="entityForm.category" placeholder="实体类别" style="width: 80px">
                 <el-option label="人物" value="PERSON" />
@@ -863,7 +859,12 @@ const handleContentSave = async (force = false) => {
 };
 
 const goBackToDocuments = () => {
-  router.push("/documents");
+  const projectId = route.query.projectId;
+  if (projectId) {
+    router.push(`/projects/${projectId}/documents`);
+  } else {
+    router.push("/documents");
+  }
 };
 
 const submitEntity = async () => {
@@ -1020,6 +1021,12 @@ onMounted(() => {
   align-items: flex-start;
 }
 
+.stage-top-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 6px;
+}
+
 .sentence-panel {
   grid-column: 1 / -1;
 }
@@ -1036,7 +1043,6 @@ onMounted(() => {
 
 .panel-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
 }

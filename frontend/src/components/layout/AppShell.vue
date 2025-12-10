@@ -3,20 +3,21 @@
     <header class="global-bar">
       <div class="title">
         <span>iAnctChinese · 古籍智能标注平台</span>
-        <small>项目 | 类型 | 时间 | 范围 | 搜索 | 导出</small>
+        <small>项目 | 类型 | 时间 | 范围 | 搜索</small>
       </div>
       <div class="actions">
-        <el-input
-          v-model="keywords"
-          placeholder="检索文言文 / 作者 / 标签"
-          clearable
-          prefix-icon="Search"
-          size="large"
-        />
-        <el-button type="primary" @click="emitSearch" size="large">搜索</el-button>
-        <el-button :loading="props.exporting" :disabled="!props.canExport" @click="$emit('export')">
-          导出
-        </el-button>
+        <template v-if="authStore.isAuthenticated">
+          <el-tooltip content="个人中心" placement="bottom">
+            <el-button class="icon-circle" circle @click="goProfile">
+              <el-icon><User /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="退出登录" placement="bottom">
+            <el-button class="icon-circle" circle @click="handleLogout">
+              <el-icon><Right /></el-icon>
+            </el-button>
+          </el-tooltip>
+        </template>
       </div>
     </header>
     <main class="content">
@@ -27,6 +28,9 @@
 
 <script setup>
 import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { User, Right } from "@element-plus/icons-vue";
+import { useAuthStore } from "@/store/authStore";
 
 const props = defineProps({
   exporting: {
@@ -40,9 +44,20 @@ const props = defineProps({
 });
 const emit = defineEmits(["search", "export"]);
 const keywords = ref("");
+const router = useRouter();
+const authStore = useAuthStore();
 
 const emitSearch = () => {
   emit("search", keywords.value);
+};
+
+const goProfile = () => {
+  router.push("/profile");
+};
+
+const handleLogout = () => {
+  authStore.logout();
+  router.push("/login");
 };
 </script>
 
@@ -84,5 +99,16 @@ const emitSearch = () => {
 .content {
   flex: 1;
   padding: 24px;
+}
+
+.icon-circle {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #e5e7eb;
+}
+
+.icon-circle:hover {
+  background: #e5e7eb;
+  color: #0f172a;
 }
 </style>

@@ -11,6 +11,7 @@ export const useTextStore = defineStore("textStore", {
     texts: [],
     selectedTextId: null,
     selectedText: null,
+    currentProjectId: null,
     entities: [],
     relations: [],
     insights: null,
@@ -49,10 +50,12 @@ export const useTextStore = defineStore("textStore", {
         await this.selectText(this.texts[0].id);
       }
     },
-    async loadTexts(category) {
+    async loadTexts(category, projectId) {
       this.loading = true;
       try {
-        const { data } = await fetchTexts(category);
+        const effectiveProjectId = projectId !== undefined ? projectId : this.currentProjectId;
+        this.currentProjectId = effectiveProjectId ?? null;
+        const { data } = await fetchTexts(category, effectiveProjectId);
         this.texts = data;
       } finally {
         this.loading = false;
@@ -94,6 +97,9 @@ export const useTextStore = defineStore("textStore", {
     async uploadNewText(payload) {
       this.saving = true;
       try {
+        if (payload?.projectId !== undefined) {
+          this.currentProjectId = payload.projectId;
+        }
         const { data } = await uploadText(payload);
         // 先本地落状态，保证界面立即显示原文
         this.selectedTextId = data.id;
@@ -292,7 +298,7 @@ export const useTextStore = defineStore("textStore", {
       this.texts = this.texts.filter((item) => item.id !== id);
       await deleteTextApi(id);
       // 再刷新服务器数据，确保一致
-      await this.loadTexts();
+      await this.loadTexts(undefined, this.currentProjectId);
       if (this.selectedTextId === id) {
         this.selectedTextId = null;
         this.selectedText = null;
@@ -306,7 +312,7 @@ export const useTextStore = defineStore("textStore", {
     },
     async updateText(id, payload) {
       const { data } = await updateTextApi(id, payload);
-      await this.loadTexts();
+      await this.loadTexts(undefined, this.currentProjectId);
       if (this.selectedTextId === id) {
         this.selectedText = data;
       }

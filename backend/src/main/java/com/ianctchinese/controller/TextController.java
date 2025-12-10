@@ -6,6 +6,7 @@ import com.ianctchinese.dto.TextCategoryUpdateRequest;
 import com.ianctchinese.dto.TextUploadRequest;
 import com.ianctchinese.dto.TextUpdateRequest;
 import com.ianctchinese.model.TextDocument;
+import com.ianctchinese.security.CurrentUser;
 import com.ianctchinese.service.ExportService;
 import com.ianctchinese.service.TextService;
 import jakarta.validation.Valid;
@@ -32,16 +33,18 @@ public class TextController {
   private final TextService textService;
   private final ExportService exportService;
   private final ObjectMapper objectMapper;
+  private final CurrentUser currentUser;
 
   @PostMapping
   public ResponseEntity<TextDocument> uploadText(@Valid @RequestBody TextUploadRequest request) {
-    return ResponseEntity.ok(textService.createText(request));
+    return ResponseEntity.ok(textService.createText(request, currentUser.getUsername()));
   }
 
   @GetMapping
   public ResponseEntity<List<TextDocument>> listTexts(
-      @RequestParam(name = "category", required = false) String category) {
-    return ResponseEntity.ok(textService.listTexts(category));
+      @RequestParam(name = "category", required = false) String category,
+      @RequestParam(name = "projectId", required = false) Long projectId) {
+    return ResponseEntity.ok(textService.listTexts(category, projectId, currentUser.getUsername()));
   }
 
   @GetMapping("/search")

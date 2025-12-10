@@ -13,6 +13,8 @@ public class TextUploadRequest {
 
   private String description;
 
+  private Long projectId;
+
   private String category;
 
   private String author;

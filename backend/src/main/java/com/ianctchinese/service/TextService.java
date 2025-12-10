@@ -6,9 +6,9 @@ import java.util.List;
 
 public interface TextService {
 
-  TextDocument createText(TextUploadRequest request);
+  TextDocument createText(TextUploadRequest request, String username);
 
-  List<TextDocument> listTexts(String category);
+  List<TextDocument> listTexts(String category, Long projectId, String username);
 
   TextDocument getText(Long id);
 

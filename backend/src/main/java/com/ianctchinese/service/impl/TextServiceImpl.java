@@ -1,13 +1,19 @@
 package com.ianctchinese.service.impl;
 
-import com.ianctchinese.dto.TextUploadRequest;
 import com.ianctchinese.dto.TextUpdateRequest;
+import com.ianctchinese.dto.TextUploadRequest;
+import com.ianctchinese.model.Project;
+import com.ianctchinese.model.ProjectMember;
 import com.ianctchinese.model.TextDocument;
+import com.ianctchinese.model.User;
 import com.ianctchinese.repository.EntityAnnotationRepository;
 import com.ianctchinese.repository.ModelJobRepository;
+import com.ianctchinese.repository.ProjectMemberRepository;
+import com.ianctchinese.repository.ProjectRepository;
 import com.ianctchinese.repository.RelationAnnotationRepository;
 import com.ianctchinese.repository.TextDocumentRepository;
 import com.ianctchinese.repository.TextSectionRepository;
+import com.ianctchinese.repository.UserRepository;
 import com.ianctchinese.service.TextService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,10 +31,18 @@ public class TextServiceImpl implements TextService {
   private final EntityAnnotationRepository entityAnnotationRepository;
   private final TextSectionRepository textSectionRepository;
   private final ModelJobRepository modelJobRepository;
+  private final ProjectRepository projectRepository;
+  private final ProjectMemberRepository projectMemberRepository;
+  private final UserRepository userRepository;
 
   @Override
   @Transactional
-  public TextDocument createText(TextUploadRequest request) {
+  public TextDocument createText(TextUploadRequest request, String username) {
+    Long projectId = request.getProjectId();
+    if (projectId != null) {
+      ensureProjectMember(projectId, username);
+    }
+
     String resolvedCategory = Optional.ofNullable(request.getCategory())
         .filter(value -> !value.isBlank())
         .orElse("unknown");
@@ -43,6 +57,7 @@ public class TextServiceImpl implements TextService {
         .title(request.getTitle())
         .content(resolvedContent)
         .description(resolvedDescription)
+        .projectId(projectId)
         .category(resolvedCategory)
         .author(resolvedAuthor)
         .era(request.getEra())
@@ -53,11 +68,19 @@ public class TextServiceImpl implements TextService {
   }
 
   @Override
-  public List<TextDocument> listTexts(String category) {
-    if (category == null || category.isBlank()) {
-      return textDocumentRepository.findActive();
+  public List<TextDocument> listTexts(String category, Long projectId, String username) {
+    if (projectId != null) {
+      ensureProjectMember(projectId, username);
+      if (category == null || category.isBlank()) {
+        return textDocumentRepository.findActiveByProjectId(projectId);
+      }
+      return textDocumentRepository.findActiveByProjectIdAndCategory(projectId, category);
     }
-    return textDocumentRepository.findActiveByCategory(category);
+    // 无项目，返回个人可见（兼容历史数据，无 projectId）
+    if (category == null || category.isBlank()) {
+      return textDocumentRepository.findActiveByProjectIdIsNull();
+    }
+    return textDocumentRepository.findActiveByProjectIdIsNullAndCategory(category);
   }
 
   @Override
@@ -106,5 +129,16 @@ public class TextServiceImpl implements TextService {
     doc.setCategory(Optional.ofNullable(request.getCategory()).orElse(doc.getCategory()));
     doc.setUpdatedAt(LocalDateTime.now());
     return textDocumentRepository.save(doc);
+  }
+
+  private void ensureProjectMember(Long projectId, String username) {
+    Project project = projectRepository.findByIdAndDeletedFalse(projectId)
+        .orElseThrow(() -> new IllegalArgumentException("项目不存在或已删除"));
+    User user = userRepository.findByUsername(username)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+    boolean isMember = projectMemberRepository.existsByProjectIdAndUserId(projectId, user.getId());
+    if (!isMember) {
+      throw new IllegalArgumentException("无权访问该项目");
+    }
   }
 }

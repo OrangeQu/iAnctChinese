@@ -10,14 +10,15 @@
           <a href="#features" class="navbar-link">核心功能</a>
           <a href="#faq" class="navbar-link">常见问题</a>
           <template v-if="!authStore.isAuthenticated">
-          <router-link to="/login" class="navbar-button">登录</router-link>
-        </template>
-        <template v-else>
-          <router-link to="/documents" class="navbar-button">文档管理</router-link>
-          <router-link to="/profile" class="navbar-button navbar-ghost">个人中心</router-link>
-          <span class="navbar-user">{{ authStore.user?.username || '已登录' }}</span>
-          <button class="navbar-button navbar-logout" @click="handleLogout">退出登录</button>
-        </template>
+            <router-link to="/login" class="navbar-button">登录</router-link>
+          </template>
+          <template v-else>
+            <router-link to="/projects" class="navbar-button navbar-ghost">项目管理</router-link>
+            <router-link to="/documents" class="navbar-button">文档管理</router-link>
+            <router-link to="/profile" class="navbar-button navbar-ghost">个人中心</router-link>
+            <span class="navbar-user">{{ authStore.user?.username || '已登录' }}</span>
+            <button class="navbar-button navbar-logout" @click="handleLogout">退出登录</button>
+          </template>
         </div>
       </div>
     </nav>
