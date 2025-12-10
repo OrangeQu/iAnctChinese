@@ -103,6 +103,7 @@ export const useTextStore = defineStore("textStore", {
         this.sections = [];
         this.texts.unshift(data);
         await this.loadNavigationTree();
+        return data;
       } finally {
         this.saving = false;
       }

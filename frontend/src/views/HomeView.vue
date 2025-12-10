@@ -10,13 +10,14 @@
           <a href="#features" class="navbar-link">核心功能</a>
           <a href="#faq" class="navbar-link">常见问题</a>
           <template v-if="!authStore.isAuthenticated">
-            <router-link to="/login" class="navbar-button">登录</router-link>
-          </template>
-          <template v-else>
-            <router-link to="/documents" class="navbar-button">文档管理</router-link>
-            <span class="navbar-user">{{ authStore.user?.username || '已登录' }}</span>
-            <button class="navbar-button navbar-logout" @click="handleLogout">退出登录</button>
-          </template>
+          <router-link to="/login" class="navbar-button">登录</router-link>
+        </template>
+        <template v-else>
+          <router-link to="/documents" class="navbar-button">文档管理</router-link>
+          <router-link to="/profile" class="navbar-button navbar-ghost">个人中心</router-link>
+          <span class="navbar-user">{{ authStore.user?.username || '已登录' }}</span>
+          <button class="navbar-button navbar-logout" @click="handleLogout">退出登录</button>
+        </template>
         </div>
       </div>
     </nav>
@@ -345,6 +346,16 @@ onBeforeUnmount(() => {
 
 .navbar-button:hover {
   background: #1d6be0;
+}
+
+.navbar-ghost {
+  background: transparent;
+  color: #2f7df6;
+  border: 1px solid #2f7df6;
+}
+
+.navbar-ghost:hover {
+  background: rgba(47, 125, 246, 0.1);
 }
 
 .hero {

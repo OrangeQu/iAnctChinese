@@ -4,6 +4,7 @@ import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import DashboardView from "@/views/DashboardView.vue";
 import DocumentManagementView from "@/views/DocumentManagementView.vue";
+import UserProfile from "@/views/UserProfile.vue";
 import { useAuthStore } from "@/store/authStore";
 
 const routes = [
@@ -32,6 +33,12 @@ const routes = [
     path: "/documents",
     name: "documents",
     component: DocumentManagementView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: "/profile",
+    name: "profile",
+    component: UserProfile,
     meta: { requiresAuth: true }
   },
   {

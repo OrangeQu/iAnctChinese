@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS texts (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   title VARCHAR(255) NOT NULL,
   content TEXT NOT NULL,
+  description TEXT,
   category VARCHAR(64) NOT NULL,
   author VARCHAR(255),
   era VARCHAR(255),

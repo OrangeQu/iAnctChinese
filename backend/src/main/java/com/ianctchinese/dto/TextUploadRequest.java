@@ -6,11 +6,12 @@ import lombok.Data;
 @Data
 public class TextUploadRequest {
 
-  @NotBlank
+  @NotBlank(message = "文档名称不能为空")
   private String title;
 
-  @NotBlank
   private String content;
+
+  private String description;
 
   private String category;
 

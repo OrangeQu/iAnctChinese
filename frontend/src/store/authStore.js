@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { authApi } from '../api/auth';
+import { userApi } from '../api/user';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -56,11 +57,32 @@ export const useAuthStore = defineStore('auth', {
         return;
       }
       try {
-        const response = await authApi.getCurrentUser();
+        const response = await userApi.getProfile();
         this.user = response.data;
         this.isAuthenticated = true;
       } catch (error) {
         this.logout();
+      }
+    },
+
+    async updateEmail(email) {
+      try {
+        const response = await userApi.updateEmail({ email });
+        this.user = response.data;
+        return { success: true, message: '邮箱已更新' };
+      } catch (error) {
+        const message = error.response?.data?.message || '邮箱更新失败';
+        return { success: false, message };
+      }
+    },
+
+    async changePassword(payload) {
+      try {
+        const response = await userApi.changePassword(payload);
+        return { success: true, message: response.data?.message || '密码已更新' };
+      } catch (error) {
+        const message = error.response?.data?.message || '密码修改失败';
+        return { success: false, message };
       }
     },
 

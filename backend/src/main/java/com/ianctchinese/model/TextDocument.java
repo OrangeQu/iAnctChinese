@@ -38,6 +38,9 @@ public class TextDocument {
   @Column(nullable = false, length = 8192)
   private String content;
 
+  @Column(length = 2048)
+  private String description;
+
   @Column(nullable = false)
   private String category;
 

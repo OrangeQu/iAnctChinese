@@ -8,16 +8,17 @@
       </div>
       <div class="actions">
         <el-input
-          v-model="keyword"
+          v-model="searchInput"
           placeholder="按标题或作者搜索"
           class="search-input"
           clearable
+          @keyup.enter="applySearch"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <TextUploadDrawer />
+        <el-button type="primary" @click="applySearch">搜索</el-button>
       </div>
     </header>
 
@@ -36,7 +37,10 @@
       <template #header>
         <div class="card-header">
           <span>文档列表</span>
-          <small>点击“进入文档”会打开分析工作台</small>
+          <div class="card-actions">
+            <el-button type="primary" plain @click="handleCreate">新建文档</el-button>
+            <el-button plain @click="goProjectList">返回项目列表</el-button>
+          </div>
         </div>
       </template>
       <el-table :data="filteredDocuments" stripe border>
@@ -74,16 +78,50 @@
       </el-table>
     </el-card>
 
+    <el-dialog v-model="createDialogVisible" title="新建文档" width="720px">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+        <el-form-item label="文档名称" prop="title">
+          <el-input v-model="createForm.title" placeholder="新文档" />
+        </el-form-item>
+        <el-form-item label="作者">
+          <el-input v-model="createForm.author" placeholder="作者/编者（可选）" />
+        </el-form-item>
+        <el-form-item label="朝代">
+          <el-input v-model="createForm.era" placeholder="如 唐 / 宋 / 清" />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input
+            v-model="createForm.content"
+            type="textarea"
+            :rows="6"
+            placeholder="粘贴文言文原文，可留空后续补充"
+          />
+        </el-form-item>
+        <el-form-item label="文档描述">
+          <el-input
+            v-model="createForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入文档描述（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateConfirm" :loading="creating">新建文档</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="editDialogVisible" title="编辑文档" width="640px">
       <el-form :model="editForm" label-width="72px">
         <el-form-item label="标题">
-          <el-input v-model="editForm.title" placeholder="如 《赤壁赋》" />
+          <el-input v-model="editForm.title" placeholder="如《赤壁赋》" />
         </el-form-item>
         <el-form-item label="作者">
           <el-input v-model="editForm.author" placeholder="作者/编者" />
         </el-form-item>
         <el-form-item label="时代">
-          <el-input v-model="editForm.era" placeholder="如 宋" />
+          <el-input v-model="editForm.era" placeholder="如宋" />
         </el-form-item>
         <el-form-item label="正文">
           <el-input v-model="editForm.content" type="textarea" :rows="8" placeholder="粘贴完整文言文内容..." />
@@ -98,17 +136,27 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Search } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
-import TextUploadDrawer from "@/components/layout/TextUploadDrawer.vue";
 import AuthToolbar from "@/components/layout/AuthToolbar.vue";
 
 const router = useRouter();
 const store = useTextStore();
-const keyword = ref("");
+const searchInput = ref("");
+const activeKeyword = ref("");
+const createDialogVisible = ref(false);
+const creating = ref(false);
+const createFormRef = ref();
+const createForm = reactive({
+  title: "新文档",
+  author: "",
+  era: "",
+  content: "",
+  description: ""
+});
 const editDialogVisible = ref(false);
 const editForm = ref({
   id: null,
@@ -118,6 +166,10 @@ const editForm = ref({
   content: ""
 });
 
+const createRules = {
+  title: [{ required: true, message: "请输入文档名称", trigger: "blur" }]
+};
+
 onMounted(async () => {
   if (!store.texts.length) {
     await store.loadTexts();
@@ -125,10 +177,10 @@ onMounted(async () => {
 });
 
 const filteredDocuments = computed(() => {
-  if (!keyword.value) {
+  if (!activeKeyword.value) {
     return store.texts;
   }
-  const text = keyword.value.trim().toLowerCase();
+  const text = activeKeyword.value;
   return store.texts.filter((item) => {
     const title = (item.title || "").toLowerCase();
     const author = (item.author || "").toLowerCase();
@@ -140,6 +192,9 @@ const categoryLabels = {
   warfare: "战争纪实",
   travelogue: "游记地理",
   biography: "人物传记",
+  agriculture: "农书类",
+  crafts: "工艺技术",
+  other: "其他",
   unknown: "待识别"
 };
 
@@ -154,6 +209,10 @@ const formatDate = (_row, _column, value) => {
     return value;
   }
   return date.toLocaleString();
+};
+
+const applySearch = () => {
+  activeKeyword.value = (searchInput.value || "").trim().toLowerCase();
 };
 
 const openDocument = async (text) => {
@@ -213,6 +272,46 @@ const handleSaveEdit = async () => {
     console.error("Failed to save text:", error);
     ElMessage.error("保存失败，请稍后再试");
   }
+};
+
+const handleCreate = () => {
+  createForm.title = "新文档";
+  createForm.description = "";
+  createForm.author = "";
+  createForm.era = "";
+  createForm.content = "";
+  createDialogVisible.value = true;
+};
+
+const goProjectList = () => {
+  ElMessage.info("项目列表功能暂未实现");
+};
+
+const handleCreateConfirm = () => {
+  createFormRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    creating.value = true;
+    try {
+      const payload = {
+        title: createForm.title || "新文档",
+        author: createForm.author || undefined,
+        era: createForm.era || undefined,
+        content: createForm.content || "",
+        description: createForm.description || ""
+      };
+      const created = await store.uploadNewText(payload);
+      createDialogVisible.value = false;
+      if (created?.id) {
+        // 确保进入结构标注阶段
+        localStorage.setItem("dashboard-stage", "structure");
+        router.push({ name: "text-workspace", params: { id: created.id } });
+      }
+    } catch (e) {
+      ElMessage.error("新建文档失败，请稍后再试");
+    } finally {
+      creating.value = false;
+    }
+  });
 };
 </script>
 
@@ -290,8 +389,9 @@ const handleSaveEdit = async () => {
   font-weight: 600;
 }
 
-.card-header small {
-  color: #9ca3af;
-  font-weight: 400;
+.card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 </style>

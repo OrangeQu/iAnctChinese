@@ -6,25 +6,41 @@
           <h3 class="section-title">原文</h3>
           <el-button link @click="goBackToDocuments">返回文档管理</el-button>
         </div>
+        <div class="editor-toolbar" v-if="editor">
+          <div class="toolbar-left">
+            <el-button-group>
+              <el-button size="small" @click="setAlign('left')">居左</el-button>
+              <el-button size="small" @click="setAlign('center')">居中</el-button>
+              <el-button size="small" @click="setAlign('right')">居右</el-button>
+            </el-button-group>
+            <el-select v-model="currentFontSize" size="small" class="font-select" @change="applyFontSize"
+              placeholder="字号">
+              <el-option v-for="size in fontSizeOptions" :key="size" :label="size + 'px'" :value="size" />
+            </el-select>
+            <el-button size="small" @click="handleUndo">撤销</el-button>
+            <el-button size="small" @click="handleRedo">重做</el-button>
+          </div>
+          <div class="toolbar-right">
+            <el-tooltip content="手动在当前位置添加阅读标记" placement="bottom">
+              <el-button size="small" type="primary" plain @click="saveBookmark">添加阅读标记</el-button>
+            </el-tooltip>
+            <el-button size="small" :disabled="bookmarkOffset === null" @click="jumpToBookmark">
+              跳转标记
+            </el-button>
+            <el-button size="small" :disabled="bookmarkOffset === null" @click="clearBookmark">
+              清除标记
+            </el-button>
+          </div>
+        </div>
         <div v-if="store.selectedText" class="editor-wrapper">
           <EditorContent :editor="editor" class="text-editor" />
         </div>
         <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文稿</p>
         <el-divider />
         <div class="action-row">
-          <el-select
-            v-model="selectedModel"
-            size="small"
-            style="width: 260px"
-            placeholder="选择大模型"
-            filterable
-          >
-            <el-option
-              v-for="item in llmModels"
-              :key="item.id"
-              :label="item.isThinking ? `【深度思考】${item.label}` : item.label"
-              :value="item.id"
-            />
+          <el-select v-model="selectedModel" size="small" style="width: 260px" placeholder="选择大模型" filterable>
+            <el-option v-for="item in llmModels" :key="item.id"
+              :label="item.isThinking ? `【深度思考】${item.label}` : item.label" :value="item.id" />
           </el-select>
           <el-button type="primary" :loading="store.analysisRunning" @click="handleFullAnalysis">
             触发模型分析
@@ -78,29 +94,16 @@
             <el-table-column prop="category" label="类别" width="120" />
             <el-table-column prop="confidence" label="置信度" />
           </el-table>
-          <el-drawer
-            v-model="entityDrawerVisible"
-            title="实体列表（按类别）"
-            direction="rtl"
-            size="30%"
-          >
+          <el-drawer v-model="entityDrawerVisible" title="实体列表（按类别）" direction="rtl" size="30%">
             <div class="entity-drawer">
-              <div
-                v-for="(list, category) in groupedEntities"
-                :key="category"
-                class="entity-group"
-              >
+              <div v-for="(list, category) in groupedEntities" :key="category" class="entity-group">
                 <div class="entity-group-title">
                   {{ translateCategoryLabel(category) }}（{{ list.length }}）
                 </div>
                 <div class="entity-tags">
-                  <el-tag
-                    v-for="item in list"
-                    :key="item.id"
-                    size="small"
+                  <el-tag v-for="item in list" :key="item.id" size="small"
                     :type="item.category === 'PERSON' ? 'warning' : item.category === 'LOCATION' ? 'info' : 'success'"
-                    effect="plain"
-                  >
+                    effect="plain">
                     {{ item.label }}
                     <span v-if="item.confidence"> · {{ (item.confidence * 100).toFixed(0) }}%</span>
                   </el-tag>
@@ -116,32 +119,18 @@
           <el-form :model="relationForm" inline class="form-inline">
             <el-form-item label="实体A">
               <el-select v-model="relationForm.sourceEntityId" placeholder="选择实体" style="width: 100px">
-                <el-option
-                  v-for="entity in entities"
-                  :key="entity.id"
-                  :label="entity.label"
-                  :value="entity.id"
-                />
+                <el-option v-for="entity in entities" :key="entity.id" :label="entity.label" :value="entity.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="实体B">
               <el-select v-model="relationForm.targetEntityId" placeholder="选择实体" style="width: 100px">
-                <el-option
-                  v-for="entity in entities"
-                  :key="`target-${entity.id}`"
-                  :label="entity.label"
-                  :value="entity.id"
-                />
+                <el-option v-for="entity in entities" :key="`target-${entity.id}`" :label="entity.label"
+                  :value="entity.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="关系">
               <el-select v-model="relationForm.relationType" placeholder="关系类型" style="width: 120px">
-                <el-option
-                  v-for="opt in relationOptions"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
+                <el-option v-for="opt in relationOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -174,23 +163,13 @@
             </div>
             <div class="segment-col">
               <div class="segment-label">句读</div>
-              <el-input
-                type="textarea"
-                v-model="section.punctuatedText"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-                placeholder="添加句读"
-                @blur="handleUpdateSection(section)"
-              />
+              <el-input type="textarea" v-model="section.punctuatedText" :autosize="{ minRows: 3, maxRows: 6 }"
+                placeholder="添加句读" @blur="handleUpdateSection(section)" />
             </div>
             <div class="segment-col">
               <div class="segment-label">摘要</div>
-              <el-input
-                type="textarea"
-                v-model="section.summary"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-                placeholder="一句话摘要"
-                @blur="handleUpdateSection(section)"
-              />
+              <el-input type="textarea" v-model="section.summary" :autosize="{ minRows: 3, maxRows: 6 }"
+                placeholder="一句话摘要" @blur="handleUpdateSection(section)" />
             </div>
           </div>
         </div>
@@ -205,10 +184,14 @@ import { reactive, ref, computed, watch, nextTick, onMounted, onActivated, onBef
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useTextStore } from "@/store/textStore";
+import { useAuthStore } from "@/store/authStore";
 import { EditorContent, useEditor } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
+import { TextStyle } from "@tiptap/extension-text-style";
+import TextAlign from "@tiptap/extension-text-align";
 import { Mark } from "@tiptap/core";
-import { TextSelection } from "prosemirror-state";
+import { TextSelection, Plugin, PluginKey } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 
 const EntityMark = Mark.create({
   name: "entity",
@@ -244,6 +227,7 @@ const EntityMark = Mark.create({
 const router = useRouter();
 const route = useRoute();
 const store = useTextStore();
+const authStore = useAuthStore();
 
 const llmModels = [
   { id: "deepseek-ai/DeepSeek-V3.2-Exp", label: "deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
@@ -454,7 +438,14 @@ const buildDocFromPlain = (text) => {
 };
 
 const editor = useEditor({
-  extensions: [StarterKit.configure({ history: false }), EntityMark],
+  extensions: [
+    StarterKit.configure({ history: true }),
+    TextStyle,
+    TextAlign.configure({
+      types: ["heading", "paragraph"]
+    }),
+    EntityMark,
+  ],
   content: "",
   editable: true,
   onUpdate: ({ editor }) => {
@@ -523,6 +514,102 @@ const updateSelectionMeta = () => {
   entityForm.label = selectedText;
 };
 
+const bookmarkOffset = ref(null);
+const fontSizeOptions = [14, 16, 18, 20, 22];
+const currentFontSize = ref(16);
+const bookmarkPluginKey = new PluginKey("bookmark-widget");
+
+const bookmarkKey = computed(() => {
+  if (!store.selectedTextId) return null;
+  const user = authStore.user?.username || "guest";
+  return `bookmark:${user}:${store.selectedTextId}`;
+});
+
+const loadBookmark = () => {
+  const key = bookmarkKey.value;
+  if (!key) {
+    bookmarkOffset.value = null;
+    return;
+  }
+  const raw = localStorage.getItem(key);
+  const num = Number(raw);
+  bookmarkOffset.value = Number.isFinite(num) ? num : null;
+  nextTick(applyBookmarkDecoration);
+};
+
+const saveBookmark = () => {
+  const ed = editor.value;
+  const key = bookmarkKey.value;
+  if (!ed || !key) return;
+  const { from } = ed.state.selection;
+  const offset = getOffsetFromPos(from);
+  bookmarkOffset.value = offset;
+  localStorage.setItem(key, String(offset));
+  ElMessage.success("阅读标记已保存");
+  applyBookmarkDecoration();
+};
+
+const jumpToBookmark = () => {
+  if (bookmarkOffset.value == null || !editor.value) return;
+  const pos = getPosFromOffset(bookmarkOffset.value);
+  editor.value
+    .chain()
+    .focus()
+    .setTextSelection({ from: pos, to: pos })
+    .scrollIntoView()
+    .run();
+};
+
+const clearBookmark = () => {
+  const key = bookmarkKey.value;
+  if (key) {
+    localStorage.removeItem(key);
+  }
+  bookmarkOffset.value = null;
+  applyBookmarkDecoration();
+};
+
+const setAlign = (align) => {
+  if (!editor.value) return;
+  editor.value.chain().focus().setTextAlign(align).run();
+};
+
+const applyFontSize = (size) => {
+  if (!editor.value) return;
+  currentFontSize.value = size;
+  editor.value.chain().focus().setMark("textStyle", { fontSize: `${size}px` }).run();
+};
+
+const handleUndo = () => {
+  editor.value?.chain().focus().undo().run();
+};
+
+const handleRedo = () => {
+  editor.value?.chain().focus().redo().run();
+};
+
+const applyBookmarkDecoration = () => {
+  const ed = editor.value;
+  if (!ed) return;
+  const doc = ed.state.doc;
+  let decorations = [];
+  if (bookmarkOffset.value != null) {
+    const pos = getPosFromOffset(bookmarkOffset.value);
+    decorations.push(
+      Decoration.widget(pos, () => {
+        const span = document.createElement("span");
+        span.className = "bookmark-flag";
+        span.title = "阅读标记";
+        span.textContent = "🚩";
+        return span;
+      })
+    );
+  }
+  const decoSet = DecorationSet.create(doc, decorations);
+  const tr = ed.state.tr.setMeta(bookmarkPluginKey, decoSet);
+  ed.view.dispatch(tr);
+};
+
 watch(
   () => route.params.id,
   (id) => {
@@ -539,6 +626,7 @@ onMounted(() => {
   if (numId) {
     store.selectText(numId);
   }
+  loadBookmark();
 });
 
 onActivated(() => {
@@ -687,6 +775,8 @@ watch(
   () => {
     syncContentToEditor();
     nextTick(applyEntityHighlight);
+    loadBookmark();
+    applyBookmarkDecoration();
   }
 );
 
@@ -697,8 +787,12 @@ watch(
     entityForm.label = "";
     entityForm.startOffset = 0;
     entityForm.endOffset = 0;
+    loadBookmark();
+    applyBookmarkDecoration();
   }
 );
+
+watch(bookmarkOffset, () => applyBookmarkDecoration());
 
 // 模型分析完成后强制重刷高亮，防止中途清空 mark 后未恢复
 watch(
@@ -947,6 +1041,27 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.font-select {
+  width: 110px;
+}
+
 .editor-wrapper {
   border: 1px solid #e4e7ed;
   border-radius: 12px;
@@ -982,9 +1097,11 @@ onMounted(() => {
   color: #4a443e;
   white-space: pre-wrap;
 }
+
 .text-editor :deep(p) {
   margin: 0 0 8px;
 }
+
 .text-editor :deep(p:last-child) {
   margin-bottom: 0;
 }
@@ -1064,26 +1181,42 @@ onMounted(() => {
   padding: 1px 2px;
   box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.05);
 }
+
+.text-editor :deep(.bookmark-flag) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  margin-left: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
 .text-editor :deep(.ner-entity[data-entity-category="PERSON"]) {
   background: rgba(250, 204, 21, 0.4);
   color: #4a443e;
 }
+
 .text-editor :deep(.ner-entity[data-entity-category="LOCATION"]) {
   background: rgba(147, 197, 253, 0.4);
   color: #0f172a;
 }
+
 .text-editor :deep(.ner-entity[data-entity-category="EVENT"]) {
   background: rgba(134, 239, 172, 0.4);
   color: #14532d;
 }
+
 .text-editor :deep(.ner-entity[data-entity-category="ORGANIZATION"]) {
   background: rgba(249, 168, 212, 0.4);
   color: #4a044e;
 }
+
 .text-editor :deep(.ner-entity[data-entity-category="OBJECT"]) {
   background: rgba(165, 180, 252, 0.4);
   color: #111827;
 }
+
 .text-editor :deep(.ner-entity[data-entity-category="CUSTOM"]),
 .text-editor :deep(.ner-entity[data-entity-category="OTHER"]),
 .text-editor :deep(.ner-entity:not([data-entity-category])) {

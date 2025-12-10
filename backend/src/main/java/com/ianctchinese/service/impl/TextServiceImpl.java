@@ -32,11 +32,19 @@ public class TextServiceImpl implements TextService {
     String resolvedCategory = Optional.ofNullable(request.getCategory())
         .filter(value -> !value.isBlank())
         .orElse("unknown");
+    String resolvedAuthor = Optional.ofNullable(request.getAuthor())
+        .filter(value -> !value.isBlank())
+        .orElse("未填写");
+    String resolvedContent = Optional.ofNullable(request.getContent())
+        .orElse("");
+    String resolvedDescription = Optional.ofNullable(request.getDescription())
+        .orElse("");
     TextDocument textDocument = TextDocument.builder()
         .title(request.getTitle())
-        .content(request.getContent())
+        .content(resolvedContent)
+        .description(resolvedDescription)
         .category(resolvedCategory)
-        .author(request.getAuthor())
+        .author(resolvedAuthor)
         .era(request.getEra())
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
