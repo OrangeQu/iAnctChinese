@@ -78,7 +78,7 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next("/login");
   } else if (authStore.isAuthenticated && (to.name === "login" || to.name === "register")) {
-    next("/dashboard");
+    next("/projects");
   } else {
     next();
   }

@@ -102,7 +102,7 @@ const handleLogin = async () => {
         const result = await authStore.login(loginForm);
         if (result.success) {
           ElMessage.success(result.message);
-          router.push('/documents');
+          router.push('/projects');
         } else {
           ElMessage.error(result.message);
         }
