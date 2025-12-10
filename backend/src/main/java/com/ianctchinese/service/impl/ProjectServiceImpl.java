@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +53,11 @@ public class ProjectServiceImpl implements ProjectService {
         .createdAt(now)
         .build());
 
-    return toResponse(project, owner, List.of(buildMemberInfo(owner, "OWNER")));
+    return toResponse(
+        project,
+        owner,
+        owner != null ? List.of(buildMemberInfo(owner, "OWNER")) : List.of()
+    );
   }
 
   @Override
@@ -70,12 +75,19 @@ public class ProjectServiceImpl implements ProjectService {
         .filter(p -> projectIds.contains(p.getId()))
         .toList();
 
-    Map<Long, User> owners = userRepository.findAllById(
-        projects.stream().map(Project::getOwnerId).toList()
-    ).stream().collect(Collectors.toMap(User::getId, u -> u));
+    // 收集需要的所有用户：项目所有者 + 当前用户所在项目的成员
+    List<Long> ownerIds = projects.stream().map(Project::getOwnerId).toList();
+    List<Long> memberUserIds = projectMemberRepository.findByProjectIdIn(projectIds).stream()
+        .map(ProjectMember::getUserId)
+        .toList();
+    List<Long> userIds = new java.util.ArrayList<>();
+    userIds.addAll(ownerIds);
+    userIds.addAll(memberUserIds);
+    Map<Long, User> users = userRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(User::getId, u -> u));
 
     return projects.stream()
-        .map(p -> toResponse(p, owners.get(p.getOwnerId()), projectMembers(p, owners)))
+        .map(p -> toResponse(p, users.get(p.getOwnerId()), projectMembers(p, users)))
         .toList();
   }
 
@@ -175,8 +187,13 @@ public class ProjectServiceImpl implements ProjectService {
     return projectMemberRepository.findByProjectId(project.getId()).stream()
         .map(pm -> {
           User u = users.get(pm.getUserId());
+          // 如果用户不存在（被删除或缓存缺失），跳过以避免 NPE
+          if (u == null) {
+            return null;
+          }
           return buildMemberInfo(u, pm.getRole().name());
         })
+        .filter(Objects::nonNull)
         .toList();
   }
 
@@ -194,6 +211,9 @@ public class ProjectServiceImpl implements ProjectService {
   }
 
   private ProjectResponse.ProjectMemberInfo buildMemberInfo(User user, String role) {
+    if (user == null) {
+      return null;
+    }
     return ProjectResponse.ProjectMemberInfo.builder()
         .userId(user.getId())
         .username(user.getUsername())

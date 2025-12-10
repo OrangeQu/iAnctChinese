@@ -131,7 +131,15 @@ const authStore = useAuthStore();
 
 const projects = computed(() => projectStore.projects || []);
 const currentUserId = computed(() => authStore.user?.id);
-const canManage = computed(() => activeProject.value?.ownerId === currentUserId.value);
+const currentUsername = computed(() => authStore.user?.username);
+const canManage = computed(() => {
+  const ownerId = activeProject.value?.ownerId;
+  const ownerName = activeProject.value?.ownerName;
+  return (
+    (ownerId && currentUserId.value && ownerId === currentUserId.value) ||
+    (ownerName && currentUsername.value && ownerName === currentUsername.value)
+  );
+});
 
 const openCreate = ref(false);
 const createForm = ref({ name: "", description: "" });
@@ -145,6 +153,9 @@ const activeProject = ref(null);
 const memberName = ref("");
 
 onMounted(async () => {
+  if (!authStore.user) {
+    await authStore.loadUser();
+  }
   await projectStore.fetchMyProjects();
 });
 
