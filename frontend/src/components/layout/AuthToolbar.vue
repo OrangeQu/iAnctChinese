@@ -21,7 +21,7 @@
 
 <script setup>
 import { ArrowLeft, User } from "@element-plus/icons-vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "@/store/authStore";
 
 const props = defineProps({
@@ -36,14 +36,30 @@ const props = defineProps({
 });
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const goBack = () => {
-  router.push(props.backTo);
+  const from = typeof route.query.from === "string" ? route.query.from : null;
+  if (from) {
+    router.push(from);
+    return;
+  }
+  // 尝试使用浏览器历史返回，失败则回退到给定路径
+  if (window.history.state?.back) {
+    router.back();
+    return;
+  }
+  router.push(props.backTo || "/projects");
 };
 
 const goProfile = () => {
-  router.push("/profile");
+  // 带上当前路径，便于个人中心返回原页面
+  const current = route.fullPath;
+  if (route.name === "profile") {
+    return;
+  }
+  router.push({ path: "/profile", query: { from: current } });
 };
 
 const handleLogout = () => {
