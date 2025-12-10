@@ -1,5 +1,5 @@
 import apiClient from "./client";
 
-export const fetchNavigationTree = () => {
-  return apiClient.get("/navigation/tree");
+export const fetchNavigationTree = (projectId) => {
+  return apiClient.get("/navigation/tree", { params: { projectId } });
 };

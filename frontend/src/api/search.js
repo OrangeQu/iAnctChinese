@@ -1,5 +1,5 @@
 import apiClient from "./client";
 
-export const searchTexts = (keyword) => {
-  return apiClient.get("/texts/search", { params: { keyword } });
+export const searchTexts = (keyword, projectId) => {
+  return apiClient.get("/texts/search", { params: { keyword, projectId } });
 };

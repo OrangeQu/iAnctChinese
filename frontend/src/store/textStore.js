@@ -252,8 +252,8 @@ export const useTextStore = defineStore("textStore", {
       const { data } = await fetchInsights(textId, params);
       this.insights = data;
     },
-    async loadNavigationTree() {
-      const { data } = await fetchNavigationTree();
+    async loadNavigationTree(projectId = this.currentProjectId) {
+      const { data } = await fetchNavigationTree(projectId);
       this.navigationTree = data;
     },
     async performSearch(keyword) {
@@ -263,7 +263,7 @@ export const useTextStore = defineStore("textStore", {
       }
       this.searchLoading = true;
       try {
-        const { data } = await searchTexts(keyword);
+        const { data } = await searchTexts(keyword, this.currentProjectId);
         this.searchResults = data;
         this.searchVersion += 1;
       } finally {
