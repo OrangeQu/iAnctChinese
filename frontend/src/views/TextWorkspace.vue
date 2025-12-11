@@ -32,7 +32,7 @@
           </div>
         </div>
         <div v-if="store.selectedText" class="editor-wrapper">
-          <EditorContent :editor="editor" class="text-editor" />
+          <EditorContent :editor="editor" class="text-editor" :style="{ fontSize: currentFontSize + 'px' }" />
         </div>
         <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文稿</p>
         <el-divider />
@@ -571,9 +571,7 @@ const setAlign = (align) => {
 };
 
 const applyFontSize = (size) => {
-  if (!editor.value) return;
   currentFontSize.value = size;
-  editor.value.chain().focus().setMark("textStyle", { fontSize: `${size}px` }).run();
 };
 
 const handleUndo = () => {
@@ -704,10 +702,9 @@ function applyEntityHighlight() {
 
   suppressSelectionUpdate.value = true;
   try {
-    ed.chain().setTextSelection({ from: 1, to: docSize }).unsetMark("entity").run();
-
     let tr = state.tr;
     const markType = state.schema.marks.entity;
+    tr = tr.removeMark(0, docSize, markType);
 
     entities.value.forEach((entity) => {
       const range = findRangeBySearch(entity);
@@ -1110,7 +1107,7 @@ onMounted(() => {
   min-height: 100%;
   outline: none;
   line-height: 1.8;
-  font-size: 15px;
+  font-size: inherit;
   color: #4a443e;
   white-space: pre-wrap;
 }
