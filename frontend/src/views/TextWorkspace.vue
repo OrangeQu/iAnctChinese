@@ -17,7 +17,7 @@
               <el-option v-for="size in fontSizeOptions" :key="size" :label="size + 'px'" :value="size" />
             </el-select>
             <el-button size="small" @click="handleUndo">撤销</el-button>
-            <el-button size="small" @click="handleRedo">重做</el-button>
+            <el-button size="small" @click="handleRedo">恢复</el-button>
           </div>
           <div class="toolbar-right">
             <el-tooltip content="手动在当前位置添加阅读标记" placement="bottom">
@@ -1018,7 +1018,13 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: flex-start;
+  align-items: stretch;
+}
+
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .stage-top-actions {
@@ -1029,6 +1035,7 @@ onMounted(() => {
 
 .sentence-panel {
   grid-column: 1 / -1;
+  margin-top: 50px;
 }
 
 @media (max-width: 1200px) {
@@ -1072,6 +1079,9 @@ onMounted(() => {
   border: 1px solid #e4e7ed;
   border-radius: 12px;
   overflow: hidden;
+  height: 520px;
+  display: flex;
+  flex-direction: column;
 }
 
 .placeholder {
@@ -1090,13 +1100,14 @@ onMounted(() => {
 }
 
 .text-editor {
-  min-height: 260px;
+  flex: 1;
   padding: 12px;
   background: #fff;
+  overflow-y: auto;
 }
 
 .text-editor :deep(.ProseMirror) {
-  min-height: 220px;
+  min-height: 100%;
   outline: none;
   line-height: 1.8;
   font-size: 15px;
