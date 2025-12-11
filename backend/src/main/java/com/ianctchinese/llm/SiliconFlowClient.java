@@ -374,4 +374,171 @@ public class SiliconFlowClient {
       return null;
     }
   }
+
+  /**
+   * 使用LLM分析文本生成词云
+   * @param textContent 文本内容
+   * @param entities 实体列表（用于辅助分析）
+   * @param modelName 模型名称
+   * @return 词云数据的JSON对象
+   */
+  public JsonNode analyzeWordCloud(String textContent, String entities, String modelName) {
+    String systemPrompt = "你是文本分析专家。分析古文关键词并生成词云数据。只返回JSON，不要额外解释。";
+
+    // 缩短文本长度以加快分析
+    String shortContent = textContent.length() > 2000 ? textContent.substring(0, 2000) : textContent;
+
+    String userPrompt = """
+        文本：%s
+
+        已识别实体：%s
+
+        请提取10-15个最重要的关键词（人物、地点、事件、概念等），并给出权重（0.4-1.0）。
+        权重越高表示该词越重要。
+
+        JSON格式：
+        {"wordCloud":[{"label":"关键词","weight":0.8}]}
+        """.formatted(shortContent, entities);
+
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
+      log.debug("Word cloud analysis result: {}", node);
+      return node;
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeWordCloud error: {}", ex.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * 使用LLM分析文本提取通用时间轴事件
+   * @param textContent 文本内容
+   * @param category 文本类型
+   * @param modelName 模型名称
+   * @return 时间轴事件的JSON对象
+   */
+  public JsonNode analyzeTimeline(String textContent, String category, String modelName) {
+    String systemPrompt = "你是古文分析专家。从文本中提取时间线上的关键事件。只返回JSON，不要额外解释。";
+
+    // 缩短文本长度以加快分析
+    String shortContent = textContent.length() > 3000 ? textContent.substring(0, 3000) : textContent;
+
+    String categoryHint = switch (category) {
+      case "warfare" -> "战争事件（如：集结、战役、议和等）";
+      case "biography" -> "人物生平事件（如：出生、入仕、升迁、谪居等）";
+      case "travelogue" -> "游历事件（如：启程、途经、抵达、归程等）";
+      default -> "重要事件（按时间顺序）";
+    };
+
+    String userPrompt = """
+        文本：%s
+        文本类型：%s
+
+        请从文本中提取3-8个关键事件（按时间顺序），包括：
+        - title: 事件标题（简短，5-10字）
+        - description: 事件描述（从文本中提取，30-50字）
+        - dateLabel: 时间标签（如：初春、壬午年、正月等，从文本中提取）
+        - significance: 重要度（1-10）
+        - eventType: 事件类型（military、official、life、travel、battle、scenery等）
+        - participants: 参与人物列表（数组，从文本中提取）
+        - location: 地点（如果有）
+        - impact: 历史影响（30-50字，分析该事件的意义）
+
+        JSON格式：
+        {"timeline":[{"title":"","description":"","dateLabel":"","significance":8,"eventType":"","participants":[""],"location":"","impact":""}]}
+        """.formatted(shortContent, categoryHint);
+
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
+      log.debug("Timeline analysis result: {}", node);
+      return node;
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeTimeline error: {}", ex.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * 使用LLM分析战役时间轴
+   * @param textContent 文本内容
+   * @param category 文本类型
+   * @param modelName 模型名称
+   * @return 战役时间轴的JSON对象
+   */
+  public JsonNode analyzeBattleTimeline(String textContent, String category, String modelName) {
+    String systemPrompt = "你是军事历史专家。分析文本中的战役发展过程。只返回JSON，不要额外解释。";
+
+    // 缩短文本长度以加快分析
+    String shortContent = textContent.length() > 3000 ? textContent.substring(0, 3000) : textContent;
+
+    String userPrompt = """
+        文本：%s
+        文本类型：%s
+
+        请分析战役的关键阶段（3-5个），包括：
+        - phase: 阶段名称（如：集结备战、初战告捷、决战时刻、战后善后等）
+        - description: 阶段描述（30-50字）
+        - intensity: 战斗激烈程度（1-10）
+        - opponent: 对手名称
+
+        JSON格式：
+        {"battles":[{"phase":"阶段","description":"描述","intensity":8,"opponent":"对手"}]}
+        """.formatted(shortContent, category);
+
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
+      log.debug("Battle timeline analysis result: {}", node);
+      return node;
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeBattleTimeline error: {}", ex.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * 使用LLM分析工艺流程周期
+   * @param textContent 文本内容
+   * @param category 文本类型
+   * @param entities 实体列表
+   * @param modelName 模型名称
+   * @return 流程周期的JSON对象
+   */
+  public JsonNode analyzeProcessCycle(String textContent, String category, String entities, String modelName) {
+    String systemPrompt = "你是农业技术和工艺制作专家。分析文本中的工艺流程或农业周期。只返回JSON，不要额外解释。";
+
+    // 缩短文本长度以加快分析
+    String shortContent = textContent.length() > 2000 ? textContent.substring(0, 2000) : textContent;
+
+    String categoryHint = category.equals("agriculture")
+        ? "农业生产（如：整地、播种、灌溉、施肥、收获等）"
+        : "工艺制作（如：选材、加工、组装、修整、装饰等）";
+
+    String userPrompt = """
+        文本：%s
+        文本类型：%s（%s）
+        已识别实体：%s
+
+        请提取4-7个关键流程步骤，包括：
+        - name: 步骤名称
+        - description: 步骤描述（30-50字）
+        - sequence: 顺序编号（1,2,3...）
+        - category: 步骤类别
+        - tools: 使用的工具列表
+        - materials: 使用的材料列表
+        - output: 产出物（可选）
+        - duration: 耗时（天数，估算值）
+
+        JSON格式：
+        {"steps":[{"name":"步骤名","description":"描述","sequence":1,"category":"类别","tools":["工具"],"materials":["材料"],"output":"产出","duration":3}]}
+        """.formatted(shortContent, category, categoryHint, entities);
+
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
+      log.debug("Process cycle analysis result: {}", node);
+      return node;
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeProcessCycle error: {}", ex.getMessage());
+      return null;
+    }
+  }
 }

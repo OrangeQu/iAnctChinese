@@ -34,6 +34,7 @@ import com.ianctchinese.repository.TextDocumentRepository;
 import com.ianctchinese.repository.TextSectionRepository;
 import com.ianctchinese.service.AnalysisService;
 import com.ianctchinese.service.TextSectionService;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +46,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,6 +82,7 @@ public class AnalysisServiceImpl implements AnalysisService {
   private final TextSectionService textSectionService;
   private final SiliconFlowClient siliconFlowClient;
   private final GeoService geoService;
+  private final Executor analysisTaskExecutor;
 
   @Override
   @Transactional
@@ -100,24 +107,99 @@ public class AnalysisServiceImpl implements AnalysisService {
     List<RelationAnnotation> relations = relationAnnotationRepository.findByTextDocumentId(textId);
     List<TextSection> sections = textSectionRepository.findByTextDocumentId(textId);
 
+    String category = text.getCategory();
+    String content = text.getContent();
+
+    log.info("开始并行构建洞察，textId={}, light={}", textId, light);
+
+    // 统计信息（快速计算，不需要并行）
     Stats stats = Stats.builder()
         .entityCount(entities.size())
         .relationCount(relations.size())
         .punctuationProgress(calculatePunctuationProgress(sections))
         .build();
 
-    List<WordCloudItem> wordCloud = buildWordCloud(entities, text.getContent());
-    List<TimelineEvent> timeline = buildTimelineFromEntities(text, entities, relations);
-    List<MapPathPoint> mapPoints = light ? Collections.emptyList() : buildMapPointsFromEntities(textId, entities);
-    List<String> recommendedViews = buildRecommendedViews(text.getCategory());
-    List<BattleEvent> battleTimeline = buildBattleTimeline(text.getCategory());
-    List<FamilyNode> familyTree = buildFamilyTree(text.getCategory(), entities, relations);
-    List<OfficialNode> officialTree = buildOfficialTree(text.getCategory(), text.getContent(), entities, relations);
-    List<ProcessStep> processCycle = buildProcessCycle(text.getCategory(), text.getContent(), entities, relations);
+    // ============ 并行构建各种可视化图谱 ============
+    // 这些图谱构建互不依赖，可以并行执行以加快速度
+    // 使用自定义线程池，设置30秒超时
+    CompletableFuture<List<WordCloudItem>> wordCloudFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行构建：词云");
+      return buildWordCloud(entities, content);
+    }, analysisTaskExecutor);
+
+    CompletableFuture<List<TimelineEvent>> timelineFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行构建：时间轴");
+      return buildTimelineFromEntities(text, entities, relations);
+    }, analysisTaskExecutor);
+
+    CompletableFuture<List<MapPathPoint>> mapPointsFuture = CompletableFuture.supplyAsync(() -> {
+      if (light) {
+        log.info("Light模式：跳过地图点构建");
+        return Collections.<MapPathPoint>emptyList();
+      }
+      log.info("并行构建：地图点（调用腾讯地图API）");
+      return buildMapPointsFromEntities(textId, entities);
+    }, analysisTaskExecutor);
+
+    CompletableFuture<List<BattleEvent>> battleTimelineFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行构建：战役时间轴（调用LLM）");
+      return buildBattleTimeline(category, content);
+    }, analysisTaskExecutor);
+
+    CompletableFuture<List<FamilyNode>> familyTreeFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行构建：家族树");
+      return buildFamilyTree(category, entities, relations);
+    }, analysisTaskExecutor);
+
+    CompletableFuture<List<OfficialNode>> officialTreeFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行构建：官职树（可能调用LLM）");
+      return buildOfficialTree(category, content, entities, relations);
+    }, analysisTaskExecutor);
+
+    CompletableFuture<List<ProcessStep>> processCycleFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行构建：流程周期");
+      return buildProcessCycle(category, content, entities, relations);
+    }, analysisTaskExecutor);
+
+    // 等待所有并行任务完成（设置30秒超时）
+    List<WordCloudItem> wordCloud;
+    List<TimelineEvent> timeline;
+    List<MapPathPoint> mapPoints;
+    List<BattleEvent> battleTimeline;
+    List<FamilyNode> familyTree;
+    List<OfficialNode> officialTree;
+    List<ProcessStep> processCycle;
+
+    try {
+      log.info("等待所有可视化图谱构建完成...");
+      wordCloud = wordCloudFuture.get(30, TimeUnit.SECONDS);
+      timeline = timelineFuture.get(30, TimeUnit.SECONDS);
+      mapPoints = mapPointsFuture.get(30, TimeUnit.SECONDS);
+      battleTimeline = battleTimelineFuture.get(30, TimeUnit.SECONDS);
+      familyTree = familyTreeFuture.get(30, TimeUnit.SECONDS);
+      officialTree = officialTreeFuture.get(30, TimeUnit.SECONDS);
+      processCycle = processCycleFuture.get(30, TimeUnit.SECONDS);
+      log.info("所有可视化图谱构建完成");
+    } catch (TimeoutException e) {
+      log.error("构建洞察时超时，使用部分结果", e);
+      // 超时时使用已完成的结果，未完成的使用空列表
+      wordCloud = wordCloudFuture.isDone() ? wordCloudFuture.join() : Collections.emptyList();
+      timeline = timelineFuture.isDone() ? timelineFuture.join() : Collections.emptyList();
+      mapPoints = mapPointsFuture.isDone() ? mapPointsFuture.join() : Collections.emptyList();
+      battleTimeline = battleTimelineFuture.isDone() ? battleTimelineFuture.join() : Collections.emptyList();
+      familyTree = familyTreeFuture.isDone() ? familyTreeFuture.join() : Collections.emptyList();
+      officialTree = officialTreeFuture.isDone() ? officialTreeFuture.join() : Collections.emptyList();
+      processCycle = processCycleFuture.isDone() ? processCycleFuture.join() : Collections.emptyList();
+    } catch (InterruptedException | ExecutionException e) {
+      log.error("构建洞察时并行任务失败", e);
+      throw new RuntimeException("构建洞察时发生错误", e);
+    }
+
+    List<String> recommendedViews = buildRecommendedViews(category);
 
     return TextInsightsResponse.builder()
         .textId(textId)
-        .category(text.getCategory())
+        .category(category)
         .stats(stats)
         .wordCloud(wordCloud)
         .timeline(timeline)
@@ -222,12 +304,49 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   private ModelAnalysisResponse doRunFullAnalysis(Long textId, String model) {
     TextDocument document = loadText(textId);
-    ClassificationPayload clsPayload = classifyWithFallback(document.getContent(), model);
+    String content = document.getContent();
+
+    log.info("开始并行调用API进行全面分析，textId={}", textId);
+
+    // ============ 第一阶段：并行调用LLM（分类 + 标注） ============
+    // 这两个API调用互不依赖，可以并行执行以加快速度
+    // 使用自定义线程池，设置60秒超时
+    CompletableFuture<ClassificationPayload> classificationFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行任务1：开始分类分析");
+      ClassificationPayload result = classifyWithFallback(content, model);
+      log.info("并行任务1：分类完成，类别={}", result.getCategory());
+      return result;
+    }, analysisTaskExecutor);
+
+    CompletableFuture<AnnotationPayload> annotationFuture = CompletableFuture.supplyAsync(() -> {
+      log.info("并行任务2：开始实体标注");
+      AnnotationPayload result = siliconFlowClient.annotateText(content, model);
+      log.info("并行任务2：标注完成，实体数={}, 关系数={}",
+               result.getEntities().size(), result.getRelations().size());
+      return result;
+    }, analysisTaskExecutor);
+
+    // 等待两个并行任务都完成（60秒超时）
+    ClassificationPayload clsPayload;
+    AnnotationPayload annPayload;
+    try {
+      log.info("等待并行任务完成...");
+      clsPayload = classificationFuture.get(60, TimeUnit.SECONDS);
+      annPayload = annotationFuture.get(60, TimeUnit.SECONDS);
+      log.info("所有并行任务已完成");
+    } catch (TimeoutException e) {
+      log.error("API调用超时", e);
+      throw new RuntimeException("分析过程超时，请稍后重试", e);
+    } catch (InterruptedException | ExecutionException e) {
+      log.error("并行调用失败", e);
+      throw new RuntimeException("分析过程中发生错误", e);
+    }
+
+    // ============ 第二阶段：保存数据（需要在事务中顺序执行） ============
     String normalizedCategory = normalizeCategory(clsPayload.getCategory(), document.getCategory());
     document.setCategory(normalizedCategory);
     textDocumentRepository.save(document);
 
-    AnnotationPayload annPayload = siliconFlowClient.annotateText(document.getContent(), model);
     relationAnnotationRepository.deleteByTextDocumentId(textId);
     entityAnnotationRepository.deleteByTextDocumentId(textId);
 
@@ -264,8 +383,11 @@ public class AnalysisServiceImpl implements AnalysisService {
         .message("模型已生成实体、关系与句读，可在前端继续校对。")
         .build();
 
+    // ============ 第三阶段：构建洞察（已优化为并行） ============
     TextInsightsResponse insights = buildInsights(textId, false);
     List<TextSection> sections = textSectionRepository.findByTextDocumentId(textId);
+
+    log.info("全面分析完成，textId={}", textId);
     return ModelAnalysisResponse.builder()
         .classification(classification)
         .annotation(annotation)
@@ -495,6 +617,32 @@ public class AnalysisServiceImpl implements AnalysisService {
   }
 
   private List<WordCloudItem> buildWordCloud(List<EntityAnnotation> entities, String content) {
+    // 使用LLM生成词云（强制调用API）
+    String entityList = entities.stream()
+        .limit(20)
+        .map(EntityAnnotation::getLabel)
+        .collect(Collectors.joining("、"));
+
+    try {
+      JsonNode result = siliconFlowClient.analyzeWordCloud(content, entityList, null);
+      if (result != null && result.has("wordCloud") && result.get("wordCloud").isArray()) {
+        List<WordCloudItem> items = new ArrayList<>();
+        result.get("wordCloud").forEach(item -> {
+          items.add(WordCloudItem.builder()
+              .label(item.path("label").asText())
+              .weight(item.path("weight").asDouble(0.5))
+              .build());
+        });
+        if (!items.isEmpty()) {
+          log.info("词云构建完成：LLM返回{}个关键词", items.size());
+          return items;
+        }
+      }
+    } catch (Exception ex) {
+      log.warn("LLM词云分析失败，使用降级方案: {}", ex.getMessage());
+    }
+
+    // 降级方案：基于实体频次
     if (entities != null && !entities.isEmpty()) {
       Map<String, Integer> freq = new HashMap<>();
       entities.forEach(e -> {
@@ -513,7 +661,7 @@ public class AnalysisServiceImpl implements AnalysisService {
           .collect(Collectors.toList());
     }
 
-    // 回退到基于文本的简易词频
+    // 最后降级：基于文本的简易词频
     String[] tokens = content.split("[，。、；：？！\\s]");
     Map<String, Integer> frequency = new HashMap<>();
     for (String token : tokens) {
@@ -535,19 +683,16 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   /**
    * 从实体和关系中构建时间线事件
+   * 优化：并行分析所有事件的历史影响，提高处理速度
+   * 改进：即使没有EVENT实体，也强制调用LLM分析文章提取时间轴
    */
   private List<TimelineEvent> buildTimelineFromEntities(
       TextDocument text,
       List<EntityAnnotation> entities,
       List<RelationAnnotation> relations) {
 
-    List<TimelineEvent> events = new ArrayList<>();
     String category = text.getCategory();
     String content = text.getContent();
-
-    // 限制历史影响分析的次数以加快速度（只分析前5个事件）
-    int maxImpactAnalysis = 5;
-    int impactAnalysisCount = 0;
 
     // 1. 从EVENT类型的实体中提取事件
     List<EntityAnnotation> eventEntities = entities.stream()
@@ -556,67 +701,157 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     log.debug("Building timeline for category '{}': found {} EVENT entities", category, eventEntities.size());
 
-    for (EntityAnnotation event : eventEntities) {
-      String eventText = extractText(content, event.getStartOffset(), event.getEndOffset());
-      String eventType = determineEventType(event, relations, category);
+    if (eventEntities.isEmpty()) {
+      // 没有EVENT实体时，强制调用LLM分析文章提取时间轴
+      log.info("没有EVENT实体，调用LLM分析文章提取时间轴");
+      return buildTimelineFromLLM(content, category);
+    }
 
-      // 查找相关人物 - 改进的逻辑
-      List<String> participants = findEventParticipants(event, relations, entities, category);
-      // 如果没有相关人物，设置为"无"
-      if (participants == null || participants.isEmpty()) {
-        participants = List.of("无");
+    // 2. 并行分析所有事件的影响
+    log.info("开始并行分析{}个事件的历史影响", eventEntities.size());
+    List<CompletableFuture<TimelineEvent>> futureEvents = eventEntities.stream()
+        .map(event -> CompletableFuture.supplyAsync(() -> {
+          try {
+            // 提取事件基本信息
+            String eventText = extractText(content, event.getStartOffset(), event.getEndOffset());
+            String eventType = determineEventType(event, relations, category);
+
+            // 查找相关人物
+            List<String> participants = findEventParticipants(event, relations, entities, category);
+            if (participants == null || participants.isEmpty()) {
+              participants = List.of("无");
+            }
+
+            // 查找相关地点
+            List<String> locations = findRelatedEntities(event, relations, entities, EntityCategory.LOCATION);
+            String location = locations.isEmpty() ? null : locations.get(0);
+
+            // 提取时间标签
+            String dateLabel = extractDateLabel(event, relations, entities, content);
+
+            // 计算重要度
+            Integer significance = calculateSignificance(event, relations);
+
+            // 分析历史影响（可能调用LLM API）
+            String impact = analyzeEventImpactWithRetry(event, eventText, content, category);
+            if (impact == null || impact.trim().isEmpty()) {
+              impact = "无";
+            }
+
+            return TimelineEvent.builder()
+                .title(event.getLabel())
+                .description(eventText)
+                .dateLabel(dateLabel)
+                .significance(significance)
+                .eventType(eventType)
+                .location(location)
+                .participants(participants)
+                .impact(impact)
+                .entityId(event.getId())
+                .startOffset(event.getStartOffset())
+                .endOffset(event.getEndOffset())
+                .build();
+          } catch (Exception e) {
+            log.error("Failed to build timeline event for '{}'", event.getLabel(), e);
+            // 返回一个基本的事件对象作为降级
+            return TimelineEvent.builder()
+                .title(event.getLabel())
+                .description("处理失败")
+                .significance(5)
+                .eventType("default")
+                .participants(List.of("无"))
+                .impact("无")
+                .entityId(event.getId())
+                .startOffset(event.getStartOffset())
+                .endOffset(event.getEndOffset())
+                .build();
+          }
+        }, analysisTaskExecutor))
+        .collect(Collectors.toList());
+
+    // 3. 收集所有并行任务的结果（设置30秒超时）
+    List<TimelineEvent> events = new ArrayList<>();
+    try {
+      for (CompletableFuture<TimelineEvent> future : futureEvents) {
+        events.add(future.get(30, TimeUnit.SECONDS));
       }
-
-      // 查找相关地点
-      List<String> locations = findRelatedEntities(event, relations, entities, EntityCategory.LOCATION);
-      String location = locations.isEmpty() ? null : locations.get(0);
-
-      // 提取时间标签
-      String dateLabel = extractDateLabel(event, relations, entities, content);
-
-      // 计算重要度
-      Integer significance = calculateSignificance(event, relations);
-
-      // 只对前几个事件使用大模型分析历史影响（加快速度）
-      String impact = "无";
-      if (impactAnalysisCount < maxImpactAnalysis) {
-        log.debug("Analyzing impact for event '{}' in category '{}'", event.getLabel(), category);
-        impact = analyzeEventImpactWithRetry(event, eventText, content, category);
-        if (impact == null || impact.trim().isEmpty()) {
-          log.debug("Event '{}' has no impact analysis, using fallback '无'", event.getLabel());
-          impact = "无";
-        } else {
-          log.debug("Event '{}' impact: {}", event.getLabel(), impact);
-          impactAnalysisCount++;
+      log.info("所有事件影响分析完成，共{}个事件", events.size());
+    } catch (TimeoutException e) {
+      log.warn("部分事件影响分析超时，使用已完成的结果", e);
+      // 收集已完成的结果
+      for (CompletableFuture<TimelineEvent> future : futureEvents) {
+        if (future.isDone()) {
+          try {
+            events.add(future.join());
+          } catch (Exception ex) {
+            log.debug("Failed to join completed future", ex);
+          }
         }
       }
-
-      events.add(TimelineEvent.builder()
-          .title(event.getLabel())
-          .description(eventText)
-          .dateLabel(dateLabel)
-          .significance(significance)
-          .eventType(eventType)
-          .location(location)
-          .participants(participants)
-          .impact(impact)
-          .entityId(event.getId())
-          .startOffset(event.getStartOffset())
-          .endOffset(event.getEndOffset())
-          .build());
+    } catch (InterruptedException | ExecutionException e) {
+      log.error("事件影响分析失败", e);
+      // 即使失败也尝试收集已完成的结果
+      for (CompletableFuture<TimelineEvent> future : futureEvents) {
+        if (future.isDone() && !future.isCompletedExceptionally()) {
+          try {
+            events.add(future.join());
+          } catch (Exception ex) {
+            log.debug("Failed to join completed future", ex);
+          }
+        }
+      }
     }
 
-    // 2. 如果没有EVENT实体，尝试从关系中构建时间线
+    // 4. 如果没有成功构建任何事件，调用LLM作为降级
     if (events.isEmpty()) {
-      events.addAll(buildTimelineFromRelations(relations, entities, content, category));
-    }
-
-    // 3. 如果还是没有事件，返回默认的模拟数据
-    if (events.isEmpty()) {
-      events.addAll(buildDefaultTimelineForCategory(category));
+      log.warn("基于实体构建时间轴失败，调用LLM降级");
+      return buildTimelineFromLLM(content, category);
     }
 
     return events;
+  }
+
+  /**
+   * 使用LLM从文章中提取时间轴事件
+   */
+  private List<TimelineEvent> buildTimelineFromLLM(String content, String category) {
+    try {
+      JsonNode result = siliconFlowClient.analyzeTimeline(content, category, null);
+      if (result != null && result.has("timeline") && result.get("timeline").isArray()) {
+        List<TimelineEvent> events = new ArrayList<>();
+        result.get("timeline").forEach(item -> {
+          // 解析participants
+          List<String> participants = new ArrayList<>();
+          if (item.has("participants") && item.get("participants").isArray()) {
+            item.get("participants").forEach(p -> participants.add(p.asText()));
+          }
+          if (participants.isEmpty()) {
+            participants.add("无");
+          }
+
+          events.add(TimelineEvent.builder()
+              .title(item.path("title").asText(""))
+              .description(item.path("description").asText(""))
+              .dateLabel(item.path("dateLabel").asText(""))
+              .significance(item.path("significance").asInt(5))
+              .eventType(item.path("eventType").asText("default"))
+              .location(item.path("location").asText(null))
+              .participants(participants)
+              .impact(item.path("impact").asText("无"))
+              .build());
+        });
+        if (!events.isEmpty()) {
+          log.info("LLM时间轴分析完成：返回{}个事件", events.size());
+          return events;
+        }
+      }
+    } catch (Exception ex) {
+      log.error("LLM时间轴分析失败: {}", ex.getMessage());
+    }
+
+    // 所有方法都失败，返回空列表而不是默认数据
+    log.warn("无法为文章生成时间轴，返回空列表");
+    return Collections.emptyList();
   }
 
   /**
@@ -1035,30 +1270,36 @@ public class AnalysisServiceImpl implements AnalysisService {
     return mapPoints;
   }
 
-  private List<BattleEvent> buildBattleTimeline(String category) {
+  private List<BattleEvent> buildBattleTimeline(String category, String content) {
     if (!"warfare".equals(category)) {
       return Collections.emptyList();
     }
-    return List.of(
-        BattleEvent.builder()
-            .phase("先声夺人")
-            .description("奇兵夜袭，对手措手不及")
-            .intensity(6)
-            .opponent("北军")
-            .build(),
-        BattleEvent.builder()
-            .phase("火攻突袭")
-            .description("顺风纵火，焚毁敌营")
-            .intensity(9)
-            .opponent("曹营")
-            .build(),
-        BattleEvent.builder()
-            .phase("追击与议和")
-            .description("乘胜北伐，并商议城下之盟")
-            .intensity(7)
-            .opponent("东路军")
-            .build()
-    );
+
+    // 使用LLM分析战役时间轴（强制调用API）
+    try {
+      JsonNode result = siliconFlowClient.analyzeBattleTimeline(content, category, null);
+      if (result != null && result.has("battles") && result.get("battles").isArray()) {
+        List<BattleEvent> events = new ArrayList<>();
+        result.get("battles").forEach(item -> {
+          events.add(BattleEvent.builder()
+              .phase(item.path("phase").asText())
+              .description(item.path("description").asText())
+              .intensity(item.path("intensity").asInt(5))
+              .opponent(item.path("opponent").asText(""))
+              .build());
+        });
+        if (!events.isEmpty()) {
+          log.info("战役时间轴构建完成：LLM返回{}个阶段", events.size());
+          return events;
+        }
+      }
+    } catch (Exception ex) {
+      log.warn("LLM战役分析失败: {}", ex.getMessage());
+    }
+
+    // 失败时返回空列表，不返回默认数据
+    log.info("战役时间轴构建失败，返回空列表");
+    return Collections.emptyList();
   }
 
   /**
@@ -1529,9 +1770,53 @@ public class AnalysisServiceImpl implements AnalysisService {
       return Collections.emptyList();
     }
 
-    List<ProcessStep> steps = new ArrayList<>();
+    // 使用LLM分析流程周期（强制调用API）
+    String entityList = entities.stream()
+        .limit(30)
+        .map(EntityAnnotation::getLabel)
+        .collect(Collectors.joining("、"));
 
-    // 1. 从EVENT类型实体中提取流程步骤
+    try {
+      JsonNode result = siliconFlowClient.analyzeProcessCycle(content, category, entityList, null);
+      if (result != null && result.has("steps") && result.get("steps").isArray()) {
+        List<ProcessStep> steps = new ArrayList<>();
+        result.get("steps").forEach(item -> {
+          // 解析工具列表
+          List<String> tools = new ArrayList<>();
+          if (item.has("tools") && item.get("tools").isArray()) {
+            item.get("tools").forEach(tool -> tools.add(tool.asText()));
+          }
+          if (tools.isEmpty()) tools.add("无");
+
+          // 解析材料列表
+          List<String> materials = new ArrayList<>();
+          if (item.has("materials") && item.get("materials").isArray()) {
+            item.get("materials").forEach(material -> materials.add(material.asText()));
+          }
+          if (materials.isEmpty()) materials.add("无");
+
+          steps.add(ProcessStep.builder()
+              .name(item.path("name").asText())
+              .description(item.path("description").asText())
+              .sequence(item.path("sequence").asInt(0))
+              .category(item.path("category").asText(""))
+              .tools(tools)
+              .materials(materials)
+              .output(item.path("output").asText(null))
+              .duration(item.path("duration").asInt(1))
+              .build());
+        });
+        if (!steps.isEmpty()) {
+          log.info("流程周期构建完成：LLM返回{}个步骤", steps.size());
+          return steps;
+        }
+      }
+    } catch (Exception ex) {
+      log.warn("LLM流程分析失败，使用降级方案: {}", ex.getMessage());
+    }
+
+    // 降级方案：从EVENT类型实体中提取流程步骤
+    List<ProcessStep> steps = new ArrayList<>();
     List<EntityAnnotation> eventEntities = entities.stream()
         .filter(e -> e.getCategory() == EntityCategory.EVENT)
         .sorted((a, b) -> Integer.compare(a.getStartOffset(), b.getStartOffset()))
@@ -1560,9 +1845,9 @@ public class AnalysisServiceImpl implements AnalysisService {
           .build());
     }
 
-    // 2. 如果没有EVENT实体，使用默认流程
+    // 如果没有步骤，返回空列表，不返回默认数据
     if (steps.isEmpty()) {
-      steps.addAll(buildDefaultProcessSteps(category));
+      log.info("流程周期构建失败，返回空列表");
     }
 
     return steps;
