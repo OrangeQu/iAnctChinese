@@ -44,6 +44,14 @@ public class GeoService {
       return List.of();
     }
 
+    // 创建 entityId -> category 的映射
+    java.util.Map<Long, String> entityCategoryMap = new java.util.HashMap<>();
+    entities.forEach(e -> {
+      if (e.getId() != null && e.getCategory() != null) {
+        entityCategoryMap.put(e.getId(), e.getCategory());
+      }
+    });
+
     // 第一步：让 LLM 将古代地名映射到现代地名
     StringBuilder userPrompt = new StringBuilder("实体列表：\n");
     entities.forEach(e -> userPrompt
@@ -63,13 +71,13 @@ public class GeoService {
     if (node != null && node.isArray()) {
       log.info("Processing {} entities from LLM response", node.size());
       for (JsonNode n : node) {
-        GeoPointDto point = geocodeEntity(n);
+        GeoPointDto point = geocodeEntity(n, entityCategoryMap);
         if (point != null) {
           points.add(point);
         }
       }
     } else if (node != null && node.isObject()) {
-      GeoPointDto point = geocodeEntity(node);
+      GeoPointDto point = geocodeEntity(node, entityCategoryMap);
       if (point != null) {
         points.add(point);
       }
@@ -81,7 +89,7 @@ public class GeoService {
     return points;
   }
 
-  private GeoPointDto geocodeEntity(JsonNode n) {
+  private GeoPointDto geocodeEntity(JsonNode n, java.util.Map<Long, String> entityCategoryMap) {
     if (n == null || !n.isObject()) return null;
 
     Long entityId = n.has("entityId") && !n.get("entityId").isNull() ? n.get("entityId").asLong() : null;
@@ -112,6 +120,9 @@ public class GeoService {
       return null;
     }
 
+    // 从映射中获取 category
+    String category = entityId != null ? entityCategoryMap.get(entityId) : null;
+
     return GeoPointDto.builder()
         .entityId(entityId)
         .label(label)
@@ -119,6 +130,7 @@ public class GeoService {
         .longitude(result.longitude())
         .source("tencent_map")
         .note(modernName)
+        .category(category)
         .build();
   }
 
