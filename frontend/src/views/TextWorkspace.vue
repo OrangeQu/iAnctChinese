@@ -16,8 +16,6 @@
               placeholder="字号">
               <el-option v-for="size in fontSizeOptions" :key="size" :label="size + 'px'" :value="size" />
             </el-select>
-            <el-button size="small" @click="handleUndo">撤销</el-button>
-            <el-button size="small" @click="handleRedo">恢复</el-button>
           </div>
           <div class="toolbar-right">
             <el-tooltip content="手动在当前位置添加阅读标记" placement="bottom">
@@ -173,6 +171,15 @@
       </section>
     </div>
   </div>
+  <el-dialog v-model="deleteDialogVisible" title="删除实体" width="360px">
+    <p>确认删除实体「{{ entityToDelete?.label || "未命名" }}」？相关关系也会一并删除。</p>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="cancelDeleteEntity">取消</el-button>
+        <el-button type="danger" @click="confirmDeleteEntity">删除</el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -293,6 +300,8 @@ const editableContent = ref("");
 const savingContent = ref(false);
 const activeEntityId = ref(null);
 const entityDrawerVisible = ref(false);
+const deleteDialogVisible = ref(false);
+const entityToDelete = ref(null);
 const allowHighlights = ref(false);
 const suppressSelectionUpdate = ref(false);
 
@@ -435,7 +444,7 @@ const buildDocFromPlain = (text) => {
 
 const editor = useEditor({
   extensions: [
-    StarterKit.configure({ history: true }),
+    StarterKit.configure({ history: false }),
     TextStyle,
     TextAlign.configure({
       types: ["heading", "paragraph"]
@@ -574,14 +583,6 @@ const applyFontSize = (size) => {
   currentFontSize.value = size;
 };
 
-const handleUndo = () => {
-  editor.value?.chain().focus().undo().run();
-};
-
-const handleRedo = () => {
-  editor.value?.chain().focus().redo().run();
-};
-
 const applyBookmarkDecoration = () => {
   const ed = editor.value;
   if (!ed) return;
@@ -621,6 +622,7 @@ onMounted(() => {
     store.selectText(numId);
   }
   loadBookmark();
+  attachEditorListeners();
 });
 
 onActivated(() => {
@@ -628,6 +630,21 @@ onActivated(() => {
   if (numId) {
     store.selectText(numId);
   }
+});
+
+onBeforeUnmount(() => {
+  detachEditorListeners();
+  const key = getBookmarkKey();
+  if (key) {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        textId: store.selectedTextId,
+        offset: bookmarkOffset.value
+      })
+    );
+  }
+  editor.value?.destroy();
 });
 
 const groupedEntities = computed(() => {
@@ -639,6 +656,48 @@ const groupedEntities = computed(() => {
   });
   return map;
 });
+
+const handleEntityContextMenu = (event) => {
+  const target = event.target?.closest?.(".ner-entity");
+  if (!target) return;
+  event.preventDefault();
+  const id = Number(target.getAttribute("data-entity-id"));
+  const label = target.getAttribute("data-entity-label");
+  const category = target.getAttribute("data-entity-category");
+  if (!id) return;
+  entityToDelete.value = { id, label, category };
+  deleteDialogVisible.value = true;
+};
+
+const confirmDeleteEntity = async () => {
+  if (!entityToDelete.value?.id) {
+    deleteDialogVisible.value = false;
+    return;
+  }
+  await store.deleteEntityAnnotation(entityToDelete.value.id);
+  ElMessage.success("已删除该实体及相关关系");
+  deleteDialogVisible.value = false;
+  entityToDelete.value = null;
+};
+
+const cancelDeleteEntity = () => {
+  deleteDialogVisible.value = false;
+  entityToDelete.value = null;
+};
+
+const detachEditorListeners = () => {
+  const dom = editor.value?.view?.dom;
+  if (dom) {
+    dom.removeEventListener("contextmenu", handleEntityContextMenu);
+  }
+};
+
+const attachEditorListeners = () => {
+  const dom = editor.value?.view?.dom;
+  if (dom) {
+    dom.addEventListener("contextmenu", handleEntityContextMenu);
+  }
+};
 
 const syncContentToEditor = () => {
   if (!editor.value) return;
@@ -991,10 +1050,6 @@ const translateRelationLabel = (rel) => {
   };
   return map[key] || rel || "未知";
 };
-
-onBeforeUnmount(() => {
-  editor.value?.destroy();
-});
 
 onMounted(() => {
   if ((entities.value || []).length > 0) {

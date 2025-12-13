@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { fetchTexts, fetchTextById, uploadText, updateTextCategory, exportText, deleteText as deleteTextApi, updateText as updateTextApi } from "@/api/texts";
-import { fetchEntities, fetchRelations, createEntity, createRelation } from "@/api/annotations";
+import { fetchEntities, fetchRelations, createEntity, createRelation, deleteEntity } from "@/api/annotations";
 import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi } from "@/api/analysis";
 import { fetchSections, autoSegment, updateSection as updateSectionApi } from "@/api/sections";
 import { fetchNavigationTree } from "@/api/navigation";
@@ -139,6 +139,18 @@ export const useTextStore = defineStore("textStore", {
       // 乐观更新：立即注入本地关系列表
       const exists = this.relations.some((r) => r.id === created.id);
       this.relations = exists ? this.relations : [...this.relations, created];
+      this.filters.entityCategories = [...this.entityOptions];
+      this.filters.relationTypes = [...this.relationOptions];
+    },
+    async deleteEntityAnnotation(entityId) {
+      await deleteEntity(entityId);
+      // 删除本地实体和相关关系
+      this.entities = this.entities.filter((e) => e.id !== entityId);
+      this.relations = this.relations.filter(
+        (r) =>
+          String(r.source?.id || r.sourceEntityId) !== String(entityId) &&
+          String(r.target?.id || r.targetEntityId) !== String(entityId)
+      );
       this.filters.entityCategories = [...this.entityOptions];
       this.filters.relationTypes = [...this.relationOptions];
     },

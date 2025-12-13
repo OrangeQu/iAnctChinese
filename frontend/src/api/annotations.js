@@ -12,6 +12,10 @@ export const createEntity = (payload) => {
   return apiClient.post("/annotations/entities", payload);
 };
 
+export const deleteEntity = (entityId) => {
+  return apiClient.delete(`/annotations/entities/${entityId}`);
+};
+
 export const createRelation = (payload) => {
   return apiClient.post("/annotations/relations", payload);
 };
