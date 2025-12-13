@@ -9,6 +9,7 @@
       <el-checkbox v-model="showTravelPath" v-if="isTravelogue" size="small">显示行进路线</el-checkbox>
       <el-checkbox v-model="showNonLocationEntities" size="small">显示非地点实体</el-checkbox>
       <el-tag v-if="!hasKey" type="warning" size="small">未配置 VITE_TMAP_KEY</el-tag>
+      <el-button v-if="hasKey" size="small" @click="routeEditorOpen = true">路线编辑</el-button>
     </div>
 
     <div class="map-content">
@@ -108,6 +109,51 @@
         </div>
       </div>
     </div>
+
+    <el-drawer v-model="routeEditorOpen" title="路线编辑" size="420px" :with-header="true">
+      <div class="route-editor">
+        <div class="route-section">
+          <div class="route-section-header">
+            <div class="route-section-title">自定义连线</div>
+            <el-button size="small" type="danger" plain :disabled="manualRoutes.length === 0" @click="clearManualRoutes">清空</el-button>
+          </div>
+          <div class="route-form" v-if="locatedMarkers.length >= 2">
+            <el-select v-model="routeFromId" placeholder="路线起点" style="width: 160px" size="small" clearable filterable>
+              <el-option v-for="opt in routeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+            <el-select v-model="routeToId" placeholder="路线终点" style="width: 160px" size="small" clearable filterable>
+              <el-option v-for="opt in routeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+            <el-button size="small" type="primary" @click="addManualRoute">添加</el-button>
+          </div>
+          <div v-else class="empty-tip">至少需要 2 个标注点才能添加路线</div>
+
+          <div v-if="manualRoutes.length === 0" class="empty-tip">暂无自定义路线</div>
+          <div v-for="route in manualRoutes" :key="route.id" class="route-row">
+            <div class="route-row-name">{{ route.fromLabel }} → {{ route.toLabel }}</div>
+            <el-button size="small" :icon="Delete" circle type="danger" @click="removeManualRoute(route.id)" />
+          </div>
+          <div class="route-hint">提示：点击地图上的橙色连线可直接删除该自定义路线</div>
+        </div>
+
+        <div v-if="isTravelogue" class="route-section">
+          <div class="route-section-header">
+            <div class="route-section-title">自动行进路线（顺序可编辑）</div>
+            <el-button size="small" plain :disabled="travelRouteMarkers.length === 0" @click="resetTravelOrder">重置</el-button>
+          </div>
+          <div v-if="travelRouteMarkers.length === 0" class="empty-tip">暂无地点标注</div>
+          <div v-for="(m, idx) in travelRouteMarkers" :key="String(m.entityId)" class="route-point-row">
+            <div class="route-point-label">{{ idx + 1 }}. {{ m.label }}</div>
+            <div class="route-point-actions">
+              <el-button size="small" plain :disabled="idx === 0" @click="moveTravelPoint(idx, -1)">↑</el-button>
+              <el-button size="small" plain :disabled="idx === travelRouteMarkers.length - 1" @click="moveTravelPoint(idx, 1)">↓</el-button>
+              <el-button size="small" type="danger" plain @click="removeTravelPoint(idx)">移除</el-button>
+            </div>
+          </div>
+          <div class="route-hint">提示：这里修改的是“显示行进路线”的连接顺序（默认只包含地点类实体）</div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -158,6 +204,7 @@ const loadError = ref("");
 const entityCategoryFilter = ref("");
 const showTravelPath = ref(true);
 const showNonLocationEntities = ref(false);
+const routeEditorOpen = ref(false);
 
 const modelOptions = [
   { id: "deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3" },
@@ -505,11 +552,7 @@ const initMap = async () => {
     updateMarkers();
     console.log("[MapView] Map initialization complete. Entities:", locationList.value.length);
 
-    // 如果有地点实体且没有已保存的标记点，自动执行一次地理标注
-    if (locationList.value.length > 0 && llmPoints.value.length === 0) {
-      console.log("[MapView] Auto-triggering geo locate...");
-      await handleAutoLocate();
-    }
+    // 注意：除非用户主动点击“自动模型标注”，否则不要自动触发任何标注请求
   } catch (err) {
     console.error("TMap 加载失败", err);
     loadError.value = err?.message || "网络/授权问题";
@@ -528,11 +571,219 @@ const initPolylineLayer = () => {
           lineCap: "round",
           showArrow: true,
           arrowOptions: { width: 6, space: 50 }
+        }),
+        route: new window.TMap.PolylineStyle({
+          color: "#f97316",
+          width: 4,
+          lineCap: "round",
+          showArrow: true,
+          arrowOptions: { width: 6, space: 60 }
         })
       },
       geometries: []
     })
   );
+
+  polylineLayer.value.on("click", (evt) => {
+    const id = evt?.geometry?.id ? String(evt.geometry.id) : "";
+    if (id.startsWith("route-")) {
+      removeManualRoute(id);
+    }
+  });
+};
+
+const routeFromId = ref(null);
+const routeToId = ref(null);
+const manualRoutes = ref([]);
+
+const routeOptions = computed(() => {
+  return (locatedMarkers.value || []).map((m) => ({
+    value: String(m.entityId),
+    label: m.label || String(m.entityId)
+  }));
+});
+
+const travelOrderIds = ref([]);
+
+const travelOrderStorageKey = computed(() => {
+  return store.selectedTextId ? `ianctchinese:travelOrder:${store.selectedTextId}` : null;
+});
+
+const getTravelCandidates = () => {
+  return locatedMarkers.value.filter((m) => m.category === "LOCATION" || !m.category);
+};
+
+const loadTravelOrder = () => {
+  const key = travelOrderStorageKey.value;
+  if (!key) {
+    travelOrderIds.value = [];
+    return;
+  }
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    travelOrderIds.value = Array.isArray(parsed) ? parsed.map((x) => String(x)) : [];
+  } catch (e) {
+    console.warn("[MapView] loadTravelOrder failed:", e);
+    travelOrderIds.value = [];
+  }
+};
+
+const saveTravelOrder = () => {
+  const key = travelOrderStorageKey.value;
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(travelOrderIds.value || []));
+  } catch (e) {
+    console.warn("[MapView] saveTravelOrder failed:", e);
+  }
+};
+
+const travelRouteMarkers = computed(() => {
+  const markers = getTravelCandidates();
+  const byId = new Map(markers.map((m) => [String(m.entityId), m]));
+  const ordered = [];
+
+  (travelOrderIds.value || []).forEach((id) => {
+    const m = byId.get(id);
+    if (m) {
+      ordered.push(m);
+      byId.delete(id);
+    }
+  });
+
+  markers.forEach((m) => {
+    const id = String(m.entityId);
+    if (byId.has(id)) {
+      ordered.push(m);
+      byId.delete(id);
+    }
+  });
+
+  return ordered;
+});
+
+const manualRoutesStorageKey = computed(() => {
+  return store.selectedTextId ? `ianctchinese:manualRoutes:${store.selectedTextId}` : null;
+});
+
+const loadManualRoutes = () => {
+  const key = manualRoutesStorageKey.value;
+  if (!key) {
+    manualRoutes.value = [];
+    return;
+  }
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    manualRoutes.value = Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn("[MapView] loadManualRoutes failed:", e);
+    manualRoutes.value = [];
+  }
+};
+
+const saveManualRoutes = () => {
+  const key = manualRoutesStorageKey.value;
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(manualRoutes.value || []));
+  } catch (e) {
+    console.warn("[MapView] saveManualRoutes failed:", e);
+  }
+};
+
+const updatePolylines = () => {
+  if (!polylineLayer.value || !window.TMap) return;
+
+  const geometries = [];
+
+  if (showTravelPath.value && isTravelogue.value) {
+    if (travelRouteMarkers.value.length >= 2) {
+      const path = travelRouteMarkers.value.map((m) => toTMapLatLng(m.lat, m.lng));
+      geometries.push({ id: "travel-path", styleId: "travel", paths: path });
+    }
+  }
+
+  (manualRoutes.value || []).forEach((r) => {
+    const from = locatedMarkers.value.find((m) => String(m.entityId) === String(r.fromId));
+    const to = locatedMarkers.value.find((m) => String(m.entityId) === String(r.toId));
+    if (!from || !to) return;
+    geometries.push({
+      id: r.id,
+      styleId: "route",
+      paths: [toTMapLatLng(from.lat, from.lng), toTMapLatLng(to.lat, to.lng)]
+    });
+  });
+
+  polylineLayer.value.setGeometries(geometries);
+};
+
+const addManualRoute = () => {
+  const fromId = routeFromId.value != null ? String(routeFromId.value) : "";
+  const toId = routeToId.value != null ? String(routeToId.value) : "";
+  if (!fromId || !toId) {
+    ElMessage.warning("请选择路线起点和终点");
+    return;
+  }
+  if (fromId === toId) {
+    ElMessage.warning("起点和终点不能相同");
+    return;
+  }
+  const from = locatedMarkers.value.find((m) => String(m.entityId) === fromId);
+  const to = locatedMarkers.value.find((m) => String(m.entityId) === toId);
+  if (!from || !to) {
+    ElMessage.warning("起点/终点未找到对应标注");
+    return;
+  }
+  manualRoutes.value.push({
+    id: `route-${fromId}-${toId}-${Date.now()}`,
+    fromId,
+    toId,
+    fromLabel: from.label || fromId,
+    toLabel: to.label || toId
+  });
+  saveManualRoutes();
+  updatePolylines();
+  ElMessage.success("已添加路线");
+};
+
+const removeManualRoute = (routeId) => {
+  manualRoutes.value = (manualRoutes.value || []).filter((r) => r.id !== routeId);
+  saveManualRoutes();
+  updatePolylines();
+};
+
+const clearManualRoutes = () => {
+  manualRoutes.value = [];
+  saveManualRoutes();
+  updatePolylines();
+};
+
+const resetTravelOrder = () => {
+  travelOrderIds.value = getTravelCandidates().map((m) => String(m.entityId));
+  saveTravelOrder();
+  updatePolylines();
+};
+
+const moveTravelPoint = (idx, delta) => {
+  const list = travelRouteMarkers.value.map((m) => String(m.entityId));
+  const target = idx + delta;
+  if (target < 0 || target >= list.length) return;
+  const tmp = list[idx];
+  list[idx] = list[target];
+  list[target] = tmp;
+  travelOrderIds.value = list;
+  saveTravelOrder();
+  updatePolylines();
+};
+
+const removeTravelPoint = (idx) => {
+  const list = travelRouteMarkers.value.map((m) => String(m.entityId));
+  list.splice(idx, 1);
+  travelOrderIds.value = list;
+  saveTravelOrder();
+  updatePolylines();
 };
 
 const setupMarkerDragEvents = () => {
@@ -553,7 +804,7 @@ const setupMarkerDragEvents = () => {
     }
 
     updateLocatedMarkersList();
-    updateTravelPath();
+    updatePolylines();
 
     emit("marker-updated", {
       entityId: Number(entityId) || entityId,
@@ -580,7 +831,7 @@ const handleMapClick = (evt) => {
     source: "manual",
     category: target.category
   });
-  updateTravelPath();
+  updatePolylines();
   focusToMarkers();
   selectedEntityId.value = null;
   ElMessage.success(`已放置标注：${target.label || target.name || target.id}`);
@@ -665,9 +916,9 @@ const handleAutoLocate = async () => {
     console.log("[MapView] locateEntities response:", data);
     llmPoints.value = Array.isArray(data) ? data : data ? [data] : [];
     console.log("[MapView] llmPoints after processing:", llmPoints.value);
-    // watch 会自动调用 updateMarkersWithDrag 和 updateTravelPath，所以这里不需要手动调用
+    // watch 会自动调用 updateMarkersWithDrag 和 updatePolylines，所以这里不需要手动调用
     // updateMarkersWithDrag();
-    // updateTravelPath();
+    // updatePolylines();
     if (!llmPoints.value.length) {
       ElMessage.warning("模型未返回坐标");
     } else {
@@ -765,20 +1016,6 @@ const updateMarkersWithDrag = () => {
   }
 };
 
-const updateTravelPath = () => {
-  if (!polylineLayer.value || !showTravelPath.value || !isTravelogue.value) {
-    if (polylineLayer.value) polylineLayer.value.setGeometries([]);
-    return;
-  }
-  const locationMarkers = locatedMarkers.value.filter((m) => m.category === "LOCATION" || !m.category);
-  if (locationMarkers.length < 2) {
-    polylineLayer.value.setGeometries([]);
-    return;
-  }
-  const path = locationMarkers.map((m) => toTMapLatLng(m.lat, m.lng));
-  polylineLayer.value.setGeometries([{ id: "travel-path", styleId: "travel", paths: path }]);
-};
-
 const selectEntity = (entity) => {
   selectedEntityId.value = entity.id || entity.label;
 };
@@ -817,7 +1054,7 @@ const onMapDrop = (evt) => {
       source: "manual",
       category: entityData.category
     });
-    updateTravelPath();
+    updatePolylines();
     ElMessage.success(`已放置：${entityData.label || entityData.name}`);
   } catch (e) {
     console.error("Drop failed:", e);
@@ -841,7 +1078,9 @@ const removeMarker = (marker) => {
   const labels = labelLayer.value.getGeometries().filter((g) => g.id !== `lbl-${id}`);
   labelLayer.value.setGeometries(labels);
   updateLocatedMarkersList();
-  updateTravelPath();
+  manualRoutes.value = (manualRoutes.value || []).filter((r) => String(r.fromId) !== id && String(r.toId) !== id);
+  saveManualRoutes();
+  updatePolylines();
   emit("marker-removed", { entityId: marker.entityId });
   ElMessage.success("已移除标注");
 };
@@ -853,13 +1092,35 @@ watch(() => [props.points, llmPoints.value], () => {
   updateTimer = setTimeout(() => {
     nextTick(() => {
       updateMarkersWithDrag();
-      updateTravelPath();
+      updatePolylines();
     });
   }, 100);
 }, { deep: true });
 
-watch(() => showTravelPath.value, () => updateTravelPath());
+watch(() => showTravelPath.value, () => updatePolylines());
 watch(() => showNonLocationEntities.value, () => updateMarkersWithDrag());
+watch(() => locatedMarkers.value, () => {
+  const candidateIds = new Set(getTravelCandidates().map((m) => String(m.entityId)));
+  if (!travelOrderIds.value.length && candidateIds.size) {
+    travelOrderIds.value = Array.from(candidateIds);
+    saveTravelOrder();
+  } else if (travelOrderIds.value.length) {
+    const next = travelOrderIds.value.filter((id) => candidateIds.has(String(id)));
+    if (next.length !== travelOrderIds.value.length) {
+      travelOrderIds.value = next;
+      saveTravelOrder();
+    }
+  }
+  updatePolylines();
+}, { deep: true });
+watch(() => store.selectedTextId, () => {
+  loadManualRoutes();
+  loadTravelOrder();
+  routeFromId.value = null;
+  routeToId.value = null;
+  nextTick(() => updatePolylines());
+}, { immediate: true });
+watch(() => manualRoutes.value, () => saveManualRoutes(), { deep: true });
 
 onMounted(async () => {
   await nextTick();
@@ -907,4 +1168,15 @@ onBeforeUnmount(() => {
 .marker-dot.manual { background: #f97316; }
 .tip { font-size: 12px; color: #409eff; }
 .empty-tip { text-align: center; color: #999; font-size: 12px; padding: 20px; }
+.route-editor { display: flex; flex-direction: column; gap: 14px; }
+.route-section { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; background: #fff; }
+.route-section-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.route-section-title { font-weight: 700; font-size: 13px; color: #111827; }
+.route-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.route-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-radius: 8px; background: #fff7ed; margin-bottom: 8px; }
+.route-row-name { font-size: 13px; color: #9a3412; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-point-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-radius: 8px; background: #f9fafb; margin-bottom: 8px; }
+.route-point-label { font-size: 13px; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-point-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.route-hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
 </style>
