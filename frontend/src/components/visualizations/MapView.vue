@@ -2,64 +2,162 @@
   <div class="map-wrapper">
     <div class="map-header">
       <h3 class="section-title">地理标注</h3>
-      <el-select v-model="selectedModel" placeholder="选择大模型" style="width: 200px" size="small" filterable>
+      <el-select v-model="selectedModel" placeholder="选择大模型" style="width: 180px" size="small" filterable>
         <el-option v-for="m in modelOptions" :key="m.id" :label="m.label" :value="m.id" />
       </el-select>
-      <el-select
-        v-model="selectedEntityId"
-        placeholder="选择实体后点击地图放置"
-        style="width: 220px"
-        size="small"
-        clearable
-        filterable
-      >
-        <el-option
-          v-for="e in selectableEntities"
-          :key="e.id || e.label"
-          :label="e.label || e.name"
-          :value="e.id || e.label"
-        />
-      </el-select>
       <el-button type="primary" size="small" :loading="locating" @click="handleAutoLocate">自动模型标注</el-button>
-      <el-tag v-if="!hasKey" type="warning" size="small">未配置 VITE_TMAP_KEY，无法显示地图</el-tag>
+      <el-checkbox v-model="showTravelPath" v-if="isTravelogue" size="small">显示行进路线</el-checkbox>
+      <el-checkbox v-model="showNonLocationEntities" size="small">显示非地点实体</el-checkbox>
+      <el-tag v-if="!hasKey" type="warning" size="small">未配置 VITE_TMAP_KEY</el-tag>
     </div>
 
-    <div class="map-canvas" ref="mapEl">
-      <div v-if="!hasKey" class="placeholder">请在 .env.local 配置 VITE_TMAP_KEY</div>
-      <div v-else-if="loadError" class="placeholder">
-        地图加载失败：{{ loadError }}。请检查 Key、域名/IP 白名单是否包含 http://localhost:5173 和当前出口 IP。
+    <div class="map-content">
+      <!-- 左侧实体列表 -->
+      <div class="entity-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">可用实体</span>
+          <el-select v-model="entityCategoryFilter" placeholder="筛选类型" size="small" clearable style="width: 100px">
+            <el-option label="全部" value="" />
+            <el-option label="地点" value="LOCATION" />
+            <el-option label="人物" value="PERSON" />
+            <el-option label="事件" value="EVENT" />
+            <el-option label="组织" value="ORGANIZATION" />
+          </el-select>
+        </div>
+        <div class="entity-list">
+          <div
+            v-for="entity in filteredSidebarEntities"
+            :key="entity.id || entity.label"
+            class="entity-card"
+            :class="{
+              'is-located': isEntityLocated(entity.id),
+              'is-selected': selectedEntityId === (entity.id || entity.label),
+              'is-dragging': draggingEntityId === (entity.id || entity.label)
+            }"
+            draggable="true"
+            @dragstart="onEntityDragStart($event, entity)"
+            @dragend="onEntityDragEnd"
+            @click="selectEntity(entity)"
+          >
+            <span class="entity-icon" :style="{ background: getEntityColor(entity.category) }"></span>
+            <span class="entity-name">{{ entity.label || entity.name }}</span>
+            <span v-if="isEntityLocated(entity.id)" class="located-badge">✓</span>
+          </div>
+          <div v-if="filteredSidebarEntities.length === 0" class="empty-tip">暂无实体</div>
+        </div>
       </div>
-    </div>
 
-    <div class="legend">
-      <div>已定位：{{ locatedMarkers.length }} 个</div>
-      <div>未定位：{{ unlocatedCount }} 个</div>
+      <!-- 地图区域 -->
+      <div class="map-area">
+        <div
+          class="map-canvas"
+          ref="mapEl"
+          @dragover.prevent="onMapDragOver"
+          @drop="onMapDrop"
+        >
+          <div v-if="!hasKey" class="placeholder">请在 .env.local 配置 VITE_TMAP_KEY</div>
+          <div v-else-if="loadError" class="placeholder">
+            地图加载失败：{{ loadError }}
+          </div>
+        </div>
+
+        <!-- 底部信息栏 -->
+        <div class="map-footer">
+          <div class="legend">
+            <span class="legend-item">
+              <span class="marker-dot llm"></span>自动标注: {{ autoLocatedCount }}
+            </span>
+            <span class="legend-item">
+              <span class="marker-dot manual"></span>手动标注: {{ manualLocatedCount }}
+            </span>
+            <span class="legend-item">未定位: {{ unlocatedCount }}</span>
+          </div>
+          <div class="tip" v-if="selectedEntityId">
+            提示: 点击地图放置「{{ selectedEntityLabel }}」，或拖拽实体到地图上
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧已标注列表 -->
+      <div class="located-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">已标注 ({{ locatedMarkers.length }})</span>
+        </div>
+        <div class="located-list">
+          <div
+            v-for="marker in locatedMarkers"
+            :key="marker.entityId"
+            class="located-card"
+            :class="{ 'is-manual': marker.source === 'manual' }"
+            @click="focusMarker(marker)"
+          >
+            <div class="located-info">
+              <span class="entity-icon" :style="{ background: getEntityColor(marker.category) }"></span>
+              <span class="located-name">{{ marker.label }}</span>
+            </div>
+            <div class="located-actions">
+              <el-tooltip content="定位" placement="top">
+                <el-button size="small" :icon="Location" circle @click.stop="focusMarker(marker)" />
+              </el-tooltip>
+              <el-tooltip content="删除标注" placement="top">
+                <el-button size="small" :icon="Delete" circle type="danger" @click.stop="removeMarker(marker)" />
+              </el-tooltip>
+            </div>
+          </div>
+          <div v-if="locatedMarkers.length === 0" class="empty-tip">暂无标注</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, markRaw } from "vue";
 import { ElMessage } from "element-plus";
+import { Location, Delete } from "@element-plus/icons-vue";
 import { useTextStore } from "@/store/textStore";
 import { locateEntities } from "@/api/geo";
+
+const MARKER_ICON_LLM =
+  "data:image/svg+xml;base64," +
+  btoa(`
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+  <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="#3b82f6"/>
+  <circle cx="16" cy="14" r="6" fill="#ffffff"/>
+</svg>`);
+
+const MARKER_ICON_MANUAL =
+  "data:image/svg+xml;base64," +
+  btoa(`
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+  <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="#f97316"/>
+  <circle cx="16" cy="14" r="6" fill="#ffffff"/>
+</svg>`);
 
 const props = defineProps({
   locations: { type: Array, default: () => [] },
   points: { type: Array, default: () => [] },
-  allEntities: { type: Array, default: () => [] }
+  allEntities: { type: Array, default: () => [] },
+  relations: { type: Array, default: () => [] }
 });
+
+const emit = defineEmits(["marker-updated", "marker-removed"]);
 
 const store = useTextStore();
 const mapEl = ref(null);
-const map = ref(null);
-const markerLayer = ref(null);
-const labelLayer = ref(null);
+const map = shallowRef(null);
+const markerLayer = shallowRef(null);
+const labelLayer = shallowRef(null);
+const polylineLayer = shallowRef(null);
 const locating = ref(false);
 const selectedEntityId = ref(null);
+const draggingEntityId = ref(null);
 const llmPoints = ref([]);
 const locatedMarkers = ref([]);
 const loadError = ref("");
+const entityCategoryFilter = ref("");
+const showTravelPath = ref(true);
+const showNonLocationEntities = ref(false);
 
 const modelOptions = [
   { id: "deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3" },
@@ -71,25 +169,73 @@ const selectedModel = ref(modelOptions[0].id);
 
 const hasKey = computed(() => !!import.meta.env.VITE_TMAP_KEY);
 const storeEntities = computed(() => store.entities || []);
+const storeRelations = computed(() => props.relations?.length ? props.relations : (store.relations || []));
 
-const locationList = computed(() => {
+const isTravelogue = computed(() => {
+  const category = store.selectedText?.category;
+  return category === "travelogue" || category === "warfare" || category === "other";
+});
+
+const allEntityList = computed(() => {
   const base =
-    (props.locations && props.locations.length && props.locations) ||
     (props.allEntities && props.allEntities.length && props.allEntities) ||
     storeEntities.value;
-  return (base || []).filter((e) => e.category === "LOCATION");
+  return base || [];
+});
+
+const locationList = computed(() => {
+  return allEntityList.value.filter((e) => e.category === "LOCATION");
 });
 
 const selectableEntities = computed(() => {
-  if (locationList.value.length) return locationList.value;
-  if (props.allEntities && props.allEntities.length) return props.allEntities;
-  return storeEntities.value;
+  if (showNonLocationEntities.value) {
+    return allEntityList.value;
+  }
+  return locationList.value.length ? locationList.value : allEntityList.value;
+});
+
+const filteredSidebarEntities = computed(() => {
+  let list = selectableEntities.value;
+  if (entityCategoryFilter.value) {
+    list = list.filter((e) => e.category === entityCategoryFilter.value);
+  }
+  return list;
 });
 
 const unlocatedCount = computed(() => {
   const locatedIds = new Set(locatedMarkers.value.map((m) => m.entityId));
-  return (locationList.value || []).filter((e) => !locatedIds.has(e.id)).length;
+  return selectableEntities.value.filter((e) => !locatedIds.has(e.id)).length;
 });
+
+const autoLocatedCount = computed(() => {
+  return locatedMarkers.value.filter((m) => m.source === "llm").length;
+});
+
+const manualLocatedCount = computed(() => {
+  return locatedMarkers.value.filter((m) => m.source === "manual").length;
+});
+
+const selectedEntityLabel = computed(() => {
+  if (!selectedEntityId.value) return "";
+  const entity = selectableEntities.value.find((e) => (e.id || e.label) === selectedEntityId.value);
+  return entity?.label || entity?.name || "";
+});
+
+const isEntityLocated = (entityId) => {
+  return locatedMarkers.value.some((m) => m.entityId === entityId);
+};
+
+const getEntityColor = (category) => {
+  const colors = {
+    LOCATION: "#2ecc71",
+    PERSON: "#e74c3c",
+    EVENT: "#f1c40f",
+    ORGANIZATION: "#3498db",
+    OBJECT: "#9b59b6",
+    CUSTOM: "#95a5a6"
+  };
+  return colors[category] || colors.CUSTOM;
+};
 
 const loadTMap = () =>
   new Promise((resolve, reject) => {
@@ -101,37 +247,21 @@ const loadTMap = () =>
     document.body.appendChild(script);
   });
 
-const MARKER_ICON_LLM = "data:image/svg+xml;base64," + btoa(`
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
-  <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="#3b82f6"/>
-  <circle cx="16" cy="14" r="6" fill="#ffffff"/>
-</svg>`);
-
-const MARKER_ICON_MANUAL = "data:image/svg+xml;base64," + btoa(`
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
-  <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="#f97316"/>
-  <circle cx="16" cy="14" r="6" fill="#ffffff"/>
-</svg>`);
-
-const markerStyles = {
-  llm: () =>
-    new window.TMap.MarkerStyle({
-      width: 32,
-      height: 40,
-      src: MARKER_ICON_LLM,
-      anchor: { x: 16, y: 40 }
-    }),
-  manual: () =>
-    new window.TMap.MarkerStyle({
-      width: 32,
-      height: 40,
-      src: MARKER_ICON_MANUAL,
-      anchor: { x: 16, y: 40 }
-    })
+const getMarkerStyleId = (source) => {
+  return source === "manual" ? "manual" : "llm";
 };
 
-const labelStyle = () =>
-  new window.TMap.LabelStyle({
+const toTMapLatLng = (lat, lng) => new window.TMap.LatLng(Number(lat), Number(lng));
+
+const readLatLng = (geo) => {
+  const lat = geo?.position?.getLat?.() ?? geo?.position?.lat ?? geo?.lat;
+  const lng = geo?.position?.getLng?.() ?? geo?.position?.lng ?? geo?.lng;
+  return { lat, lng };
+};
+
+const createLabelStyle = (TMap) => {
+  if (!TMap) return null;
+  return new TMap.LabelStyle({
     color: "#111",
     size: 14,
     bold: true,
@@ -141,24 +271,49 @@ const labelStyle = () =>
     align: "center",
     verticalAlign: "middle"
   });
+};
 
 const resetLayers = () => {
-  if (!map.value || !window.TMap) return;
-  markerLayer.value = new window.TMap.MultiMarker({
-    map: map.value,
-    styles: {
-      llm: markerStyles.llm(),
-      manual: markerStyles.manual()
-    },
-    geometries: []
-  });
-  labelLayer.value = new window.TMap.MultiLabel({
-    map: map.value,
-    styles: {
-      default: labelStyle()
-    },
-    geometries: []
-  });
+  if (!map.value || !window.TMap) {
+    console.warn("[MapView] resetLayers: map or TMap not ready");
+    return;
+  }
+  const TMap = window.TMap;
+  console.log("[MapView] resetLayers: TMap available, creating styles...");
+
+  // 显式指定 src，避免默认示例图标 404 导致标记不可见
+  const styles = {
+    llm: new TMap.MarkerStyle({
+      width: 32,
+      height: 40,
+      src: MARKER_ICON_LLM,
+      anchor: { x: 16, y: 40 }
+    }),
+    manual: new TMap.MarkerStyle({
+      width: 32,
+      height: 40,
+      src: MARKER_ICON_MANUAL,
+      anchor: { x: 16, y: 40 }
+    })
+  };
+  console.log("[MapView] resetLayers: using inline SVG marker styles");
+  markerLayer.value = markRaw(
+    new TMap.MultiMarker({
+      map: map.value,
+      styles,
+      geometries: []
+    })
+  );
+  console.log("[MapView] resetLayers: MultiMarker created, visible:", markerLayer.value.getVisible());
+  const lblStyle = createLabelStyle(TMap);
+  labelLayer.value = markRaw(
+    new TMap.MultiLabel({
+      map: map.value,
+      styles: lblStyle ? { default: lblStyle } : {},
+      geometries: []
+    })
+  );
+  console.log("[MapView] resetLayers: layers initialized successfully");
 };
 
 const clearMarkers = () => {
@@ -167,18 +322,21 @@ const clearMarkers = () => {
   locatedMarkers.value = [];
 };
 
-const addMarker = ({ entityId, label, lat, lng, source }) => {
+const addMarker = ({ entityId, label, lat, lng, source, category }) => {
   if (!markerLayer.value || !labelLayer.value || !window.TMap) return;
   const id = String(entityId);
-  const position = new window.TMap.LatLng(lat, lng);
+  const position = toTMapLatLng(lat, lng);
 
-  // 去重：同一个实体只留最新
+  const entity = selectableEntities.value.find((e) => e.id === entityId || e.id === Number(entityId));
+  const entityCategory = category || entity?.category || "LOCATION";
+  const styleId = getMarkerStyleId(source);
+
   const geos = markerLayer.value.getGeometries().filter((g) => g.id !== id);
   geos.push({
     id,
-    styleId: source === "manual" ? "manual" : "llm",
+    styleId,
     position,
-    properties: { label, source }
+    properties: { label, source, category: entityCategory, lat, lng }
   });
   markerLayer.value.setGeometries(geos);
 
@@ -191,42 +349,121 @@ const addMarker = ({ entityId, label, lat, lng, source }) => {
   });
   labelLayer.value.setGeometries(labels);
 
+  updateLocatedMarkersList();
+};
+
+const updateLocatedMarkersList = () => {
+  if (!markerLayer.value) return;
+  const geos = markerLayer.value.getGeometries();
   locatedMarkers.value = geos.map((g) => ({
-    entityId: Number(g.id),
+    entityId: Number(g.id) || g.id,
     label: g.properties?.label || g.id,
-    source: g.properties?.source || "llm"
+    source: g.properties?.source || "llm",
+    category: g.properties?.category || "LOCATION",
+    lat: g.position?.getLat?.() ?? g.position?.lat ?? g.properties?.lat,
+    lng: g.position?.getLng?.() ?? g.position?.lng ?? g.properties?.lng
   }));
 };
 
-const focusToMarkers = () => {
-  if (!markerLayer.value) return;
-  const geos = markerLayer.value.getGeometries();
-  if (!geos.length) return;
-  if (geos.length === 1) {
-    map.value.setCenter(geos[0].position);
-    map.value.setZoom(7);
+let focusTimer = null;
+const focusToMarkers = (markers = null) => {
+  if (!map.value || !window.TMap) {
+    console.warn("[MapView] focusToMarkers: map or TMap not ready");
     return;
   }
-  const bounds = new window.TMap.LatLngBounds();
-  geos.forEach((g) => bounds.extend(g.position));
-  map.value.fitBounds(bounds);
+
+  // 防抖：取消之前的定时器
+  if (focusTimer) {
+    clearTimeout(focusTimer);
+    focusTimer = null;
+  }
+
+  // 如果传入了 markers 参数，直接使用，否则从图层获取
+  const geos = markers || (markerLayer.value ? markerLayer.value.getGeometries() : []);
+  console.log("[MapView] focusToMarkers: processing", geos.length, "markers");
+
+  if (!geos.length) {
+    console.warn("[MapView] focusToMarkers: no markers to focus on");
+    return;
+  }
+
+  // 收集所有有效坐标
+  const validCoords = [];
+  geos.forEach((g) => {
+    const { lat, lng } = readLatLng(g);
+    if (typeof lat === 'number' && typeof lng === 'number' &&
+        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      validCoords.push({ lat, lng });
+    }
+  });
+
+  if (!validCoords.length) {
+    console.warn("[MapView] focusToMarkers: no valid coordinates");
+    return;
+  }
+
+  // 使用防抖延迟执行
+  focusTimer = setTimeout(() => {
+    if (!map.value) return;
+
+    if (validCoords.length === 1) {
+      console.log("[MapView] focusToMarkers: single marker at", validCoords[0].lat, validCoords[0].lng);
+      map.value.setCenter(new window.TMap.LatLng(validCoords[0].lat, validCoords[0].lng));
+      map.value.setZoom(12);
+      return;
+    }
+
+    // 计算中心点和合适的缩放级别
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    validCoords.forEach(({ lat, lng }) => {
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+    });
+
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+    const latSpan = maxLat - minLat;
+    const lngSpan = maxLng - minLng;
+    const maxSpan = Math.max(latSpan, lngSpan);
+
+    // 根据跨度计算缩放级别
+    let zoom = 10;
+    if (maxSpan < 0.01) zoom = 15;
+    else if (maxSpan < 0.05) zoom = 13;
+    else if (maxSpan < 0.1) zoom = 12;
+    else if (maxSpan < 0.5) zoom = 10;
+    else if (maxSpan < 1) zoom = 9;
+    else if (maxSpan < 5) zoom = 7;
+    else zoom = 5;
+
+    console.log("[MapView] focusToMarkers: center=", centerLat, centerLng, "zoom=", zoom, "span=", maxSpan);
+    map.value.setCenter(new window.TMap.LatLng(centerLat, centerLng));
+    map.value.setZoom(zoom);
+  }, 200);
 };
 
 const applyLlmPoints = () => {
+  const markers = [];
   (llmPoints.value || []).forEach((p) => {
     const lat = p.latitude ?? p.lat;
     const lng = p.longitude ?? p.lng;
-    if (lat && lng) {
-      addMarker({
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      const marker = {
         entityId: p.entityId || p.id || p.label,
         label: p.label || p.name || p.id,
-        lat,
-        lng,
+        lat: Number(lat),
+        lng: Number(lng),
         source: "llm"
-      });
+      };
+      addMarker(marker);
+      markers.push(marker);
     }
   });
-  focusToMarkers();
+  if (markers.length > 0) {
+    focusToMarkers(markers);
+  }
 };
 
 const updateMarkers = () => {
@@ -236,12 +473,12 @@ const updateMarkers = () => {
   (props.points || []).forEach((p) => {
     const lat = p.latitude ?? p.lat;
     const lng = p.longitude ?? p.lng;
-    if (lat && lng) {
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
       addMarker({
         entityId: p.entityId || p.id || p.label,
         label: p.label || p.name || p.id,
-        lat,
-        lng,
+        lat: Number(lat),
+        lng: Number(lng),
         source: "llm"
       });
     }
@@ -253,19 +490,80 @@ const updateMarkers = () => {
 const initMap = async () => {
   if (!hasKey.value) return;
   try {
+    console.log("[MapView] Loading TMap...");
     const TMap = await loadTMap();
-    map.value = new TMap.Map(mapEl.value, {
+    console.log("[MapView] TMap loaded, creating map...");
+    map.value = markRaw(new TMap.Map(mapEl.value, {
       center: new TMap.LatLng(35.8617, 104.1954),
       zoom: 4
-    });
+    }));
+    console.log("[MapView] Map created, initializing layers...");
     resetLayers();
+    initPolylineLayer();
     map.value.on("click", handleMapClick);
+    setupMarkerDragEvents();
     updateMarkers();
+    console.log("[MapView] Map initialization complete. Entities:", locationList.value.length);
+
+    // 如果有地点实体且没有已保存的标记点，自动执行一次地理标注
+    if (locationList.value.length > 0 && llmPoints.value.length === 0) {
+      console.log("[MapView] Auto-triggering geo locate...");
+      await handleAutoLocate();
+    }
   } catch (err) {
     console.error("TMap 加载失败", err);
-    loadError.value =
-      err?.message || "网络/授权问题，建议检查 Key、域名/IP 白名单或刷新重试";
+    loadError.value = err?.message || "网络/授权问题";
   }
+};
+
+const initPolylineLayer = () => {
+  if (!map.value || !window.TMap) return;
+  polylineLayer.value = markRaw(
+    new window.TMap.MultiPolyline({
+      map: map.value,
+      styles: {
+        travel: new window.TMap.PolylineStyle({
+          color: "#409eff",
+          width: 4,
+          lineCap: "round",
+          showArrow: true,
+          arrowOptions: { width: 6, space: 50 }
+        })
+      },
+      geometries: []
+    })
+  );
+};
+
+const setupMarkerDragEvents = () => {
+  if (!markerLayer.value) return;
+  markerLayer.value.on("dragend", (evt) => {
+    const geometry = evt.geometry;
+    if (!geometry) return;
+    const entityId = geometry.id;
+    const newLat = geometry.position?.getLat?.() ?? geometry.position?.lat;
+    const newLng = geometry.position?.getLng?.() ?? geometry.position?.lng;
+    if (!Number.isFinite(newLat) || !Number.isFinite(newLng)) return;
+
+    const labels = labelLayer.value.getGeometries();
+    const labelIdx = labels.findIndex((l) => l.id === `lbl-${entityId}`);
+    if (labelIdx >= 0) {
+      labels[labelIdx].position = toTMapLatLng(newLat, newLng);
+      labelLayer.value.setGeometries(labels);
+    }
+
+    updateLocatedMarkersList();
+    updateTravelPath();
+
+    emit("marker-updated", {
+      entityId: Number(entityId) || entityId,
+      lat: newLat,
+      lng: newLng,
+      source: "manual"
+    });
+
+    ElMessage.success("标记位置已更新");
+  });
 };
 
 const handleMapClick = (evt) => {
@@ -274,58 +572,294 @@ const handleMapClick = (evt) => {
     (e) => (e.id || e.label) === selectedEntityId.value
   );
   if (!target) return;
-  addMarker({
+  addMarkerWithDrag({
     entityId: target.id || target.label,
     label: target.label || target.name || target.id,
     lat: evt.latLng.getLat(),
     lng: evt.latLng.getLng(),
-    source: "manual"
+    source: "manual",
+    category: target.category
   });
+  updateTravelPath();
   focusToMarkers();
+  selectedEntityId.value = null;
   ElMessage.success(`已放置标注：${target.label || target.name || target.id}`);
+};
+
+const addMarkerWithDrag = ({ entityId, label, lat, lng, source, category }) => {
+  if (!markerLayer.value || !labelLayer.value || !window.TMap) {
+    console.warn("[MapView] addMarkerWithDrag: layer not ready", { markerLayer: !!markerLayer.value, labelLayer: !!labelLayer.value, TMap: !!window.TMap });
+    return;
+  }
+  const id = String(entityId);
+  const position = toTMapLatLng(lat, lng);
+
+  const entity = selectableEntities.value.find((e) => e.id === entityId || e.id === Number(entityId));
+  const entityCategory = category || entity?.category || "LOCATION";
+  const styleId = getMarkerStyleId(source);
+
+  console.log("[MapView] addMarkerWithDrag:", { id, label, lat, lng, source, styleId, entityCategory });
+  console.log("[MapView] position object:", position);
+
+  const geos = markerLayer.value.getGeometries().filter((g) => g.id !== id);
+  const newGeo = {
+    id,
+    styleId,
+    position,
+    properties: { label, source, category: entityCategory, lat, lng }
+  };
+  geos.push(newGeo);
+  console.log("[MapView] About to setGeometries with", geos.length, "markers");
+  console.log("[MapView] Geometry objects:", JSON.stringify(geos.map(g => ({
+    id: g.id,
+    styleId: g.styleId,
+    lat: g.position?.getLat?.() ?? g.position?.lat,
+    lng: g.position?.getLng?.() ?? g.position?.lng,
+    properties: g.properties
+  }))));
+
+  markerLayer.value.setGeometries(geos);
+
+  console.log("[MapView] After setGeometries, markerLayer.getGeometries():", markerLayer.value.getGeometries().length);
+  console.log("[MapView] MarkerLayer visible:", markerLayer.value.getVisible());
+  console.log("[MapView] Map zoom:", map.value.getZoom(), "center:", map.value.getCenter().toString());
+
+  const labels = labelLayer.value.getGeometries().filter((g) => g.id !== `lbl-${id}`);
+  labels.push({
+    id: `lbl-${id}`,
+    styleId: "default",
+    position,
+    content: label || id
+  });
+  labelLayer.value.setGeometries(labels);
+  updateLocatedMarkersList();
+  console.log("[MapView] Marker added successfully, total markers:", markerLayer.value.getGeometries().length);
 };
 
 const handleAutoLocate = async () => {
   try {
     if (!store.selectedTextId) {
       ElMessage.warning("请先选择一篇文本");
+      console.warn("[MapView] handleAutoLocate: No text selected");
       return;
     }
-    const entities = (locationList.value || []).map((e) => ({
+    // 自动标注：对所有实体都尝试映射到一个现代可搜索地点（不限制为 LOCATION）
+    const sourceList = allEntityList.value;
+    const entities = (sourceList || []).map((e) => ({
       id: e.id,
       label: e.label || e.name,
       category: e.category
     }));
+    console.log("[MapView] handleAutoLocate: entities to locate:", entities);
     if (!entities.length) {
-      ElMessage.warning("没有地点类实体可标注");
+      ElMessage.warning("没有实体可标注");
       return;
     }
     locating.value = true;
+    console.log("[MapView] Calling locateEntities API...");
     const { data } = await locateEntities({
       textId: store.selectedTextId,
       model: selectedModel.value,
       entities
     });
+    console.log("[MapView] locateEntities response:", data);
     llmPoints.value = Array.isArray(data) ? data : data ? [data] : [];
-    updateMarkers();
+    console.log("[MapView] llmPoints after processing:", llmPoints.value);
+    // watch 会自动调用 updateMarkersWithDrag 和 updateTravelPath，所以这里不需要手动调用
+    // updateMarkersWithDrag();
+    // updateTravelPath();
     if (!llmPoints.value.length) {
       ElMessage.warning("模型未返回坐标");
     } else {
-      ElMessage.success("自动标注完成");
+      ElMessage.success(`自动标注完成，共 ${llmPoints.value.length} 个地点`);
     }
   } catch (err) {
-    console.error(err);
-    ElMessage.error("自动标注失败");
+    console.error("[MapView] handleAutoLocate error:", err);
+    ElMessage.error("自动标注失败: " + (err.message || err));
   } finally {
     locating.value = false;
   }
 };
 
-watch(
-  () => [props.points, llmPoints.value],
-  () => nextTick(() => updateMarkers()),
-  { deep: true }
-);
+const updateMarkersWithDrag = () => {
+  if (!map.value || !markerLayer.value) return;
+  console.log("[MapView] updateMarkersWithDrag: clearing and re-adding markers...");
+  clearMarkers();
+
+  const allMarkers = [];
+
+  (props.points || []).forEach((p) => {
+    const lat = p.latitude ?? p.lat;
+    const lng = p.longitude ?? p.lng;
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      allMarkers.push({
+        entityId: p.entityId || p.id || p.label,
+        label: p.label || p.name || p.id,
+        lat: Number(lat),
+        lng: Number(lng),
+        source: "llm",
+        category: p.category
+      });
+    }
+  });
+
+  (llmPoints.value || []).forEach((p) => {
+    const lat = p.latitude ?? p.lat;
+    const lng = p.longitude ?? p.lng;
+    if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      allMarkers.push({
+        entityId: p.entityId || p.id || p.label,
+        label: p.label || p.name || p.id,
+        lat: Number(lat),
+        lng: Number(lng),
+        source: "llm",
+        category: p.category
+      });
+    }
+  });
+
+  console.log("[MapView] Total markers to add:", allMarkers.length);
+
+  // 批量添加所有标记
+  const geometries = [];
+  const labels = [];
+
+  allMarkers.forEach(marker => {
+    const id = String(marker.entityId);
+    const position = toTMapLatLng(marker.lat, marker.lng);
+    const styleId = getMarkerStyleId(marker.source);
+
+    geometries.push({
+      id,
+      styleId,
+      position,
+      properties: {
+        label: marker.label,
+        source: marker.source,
+        category: marker.category || "LOCATION",
+        lat: marker.lat,
+        lng: marker.lng
+      }
+    });
+
+    labels.push({
+      id: `lbl-${id}`,
+      styleId: "default",
+      position,
+      content: marker.label || id
+    });
+  });
+
+  console.log("[MapView] Setting", geometries.length, "geometries at once");
+  markerLayer.value.setGeometries(geometries);
+  labelLayer.value.setGeometries(labels);
+
+  console.log("[MapView] After setGeometries, markerLayer has", markerLayer.value.getGeometries().length, "markers");
+
+  updateLocatedMarkersList();
+
+  // 直接传递标记数据给 focusToMarkers，不依赖图层获取
+  if (allMarkers.length > 0) {
+    console.log("[MapView] Focusing to", allMarkers.length, "markers...");
+    focusToMarkers(allMarkers);
+  }
+};
+
+const updateTravelPath = () => {
+  if (!polylineLayer.value || !showTravelPath.value || !isTravelogue.value) {
+    if (polylineLayer.value) polylineLayer.value.setGeometries([]);
+    return;
+  }
+  const locationMarkers = locatedMarkers.value.filter((m) => m.category === "LOCATION" || !m.category);
+  if (locationMarkers.length < 2) {
+    polylineLayer.value.setGeometries([]);
+    return;
+  }
+  const path = locationMarkers.map((m) => toTMapLatLng(m.lat, m.lng));
+  polylineLayer.value.setGeometries([{ id: "travel-path", styleId: "travel", paths: path }]);
+};
+
+const selectEntity = (entity) => {
+  selectedEntityId.value = entity.id || entity.label;
+};
+
+const onEntityDragStart = (evt, entity) => {
+  draggingEntityId.value = entity.id || entity.label;
+  evt.dataTransfer.setData("application/json", JSON.stringify(entity));
+  evt.dataTransfer.effectAllowed = "copy";
+};
+
+const onEntityDragEnd = () => {
+  draggingEntityId.value = null;
+};
+
+const onMapDragOver = (evt) => {
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect = "copy";
+};
+
+const onMapDrop = (evt) => {
+  evt.preventDefault();
+  try {
+    const entityData = JSON.parse(evt.dataTransfer.getData("application/json"));
+    if (!entityData || !map.value) return;
+    const rect = mapEl.value.getBoundingClientRect();
+    const x = evt.clientX - rect.left;
+    const y = evt.clientY - rect.top;
+    const containerPoint = new window.TMap.Point(x, y);
+    const latLng = map.value.unprojectFromContainer(containerPoint);
+    if (!latLng) return;
+    addMarkerWithDrag({
+      entityId: entityData.id || entityData.label,
+      label: entityData.label || entityData.name,
+      lat: latLng.getLat(),
+      lng: latLng.getLng(),
+      source: "manual",
+      category: entityData.category
+    });
+    updateTravelPath();
+    ElMessage.success(`已放置：${entityData.label || entityData.name}`);
+  } catch (e) {
+    console.error("Drop failed:", e);
+  }
+  draggingEntityId.value = null;
+};
+
+const focusMarker = (marker) => {
+  const lat = Number(marker?.lat);
+  const lng = Number(marker?.lng);
+  if (!map.value || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  map.value.setCenter(new window.TMap.LatLng(lat, lng));
+  map.value.setZoom(8);
+};
+
+const removeMarker = (marker) => {
+  if (!markerLayer.value || !labelLayer.value) return;
+  const id = String(marker.entityId);
+  const geos = markerLayer.value.getGeometries().filter((g) => g.id !== id);
+  markerLayer.value.setGeometries(geos);
+  const labels = labelLayer.value.getGeometries().filter((g) => g.id !== `lbl-${id}`);
+  labelLayer.value.setGeometries(labels);
+  updateLocatedMarkersList();
+  updateTravelPath();
+  emit("marker-removed", { entityId: marker.entityId });
+  ElMessage.success("已移除标注");
+};
+
+let updateTimer = null;
+watch(() => [props.points, llmPoints.value], () => {
+  // 防抖：避免频繁更新
+  if (updateTimer) clearTimeout(updateTimer);
+  updateTimer = setTimeout(() => {
+    nextTick(() => {
+      updateMarkersWithDrag();
+      updateTravelPath();
+    });
+  }, 100);
+}, { deep: true });
+
+watch(() => showTravelPath.value, () => updateTravelPath());
+watch(() => showNonLocationEntities.value, () => updateMarkersWithDrag());
 
 onMounted(async () => {
   await nextTick();
@@ -334,53 +868,43 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearMarkers();
+  if (polylineLayer.value) polylineLayer.value.setGeometries([]);
   map.value = null;
 });
 </script>
 
 <style scoped>
-.map-wrapper {
-  background: #fff;
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-.map-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.map-canvas {
-  width: 100%;
-  height: 600px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #f5f7fa;
-  position: relative;
-}
-.placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #999;
-}
-.legend {
-  margin-top: 8px;
-  color: #555;
-  font-size: 13px;
-  display: flex;
-  gap: 16px;
-}
-.map-label {
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: nowrap;
-}
+.map-wrapper { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.map-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.section-title { margin: 0; font-size: 16px; font-weight: 600; }
+.map-content { display: flex; gap: 16px; height: 650px; }
+.entity-sidebar, .located-sidebar { width: 180px; background: #f9fafb; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-header { padding: 10px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sidebar-title { font-weight: 600; font-size: 13px; }
+.entity-list, .located-list { flex: 1; overflow-y: auto; padding: 8px; }
+.entity-card { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 6px; background: #fff; border-radius: 6px; cursor: grab; border: 2px solid transparent; transition: all 0.2s; }
+.entity-card:hover { border-color: #409eff; }
+.entity-card.is-located { opacity: 0.6; cursor: default; }
+.entity-card.is-selected { border-color: #67c23a; background: #f0f9eb; }
+.entity-card.is-dragging { opacity: 0.5; }
+.entity-icon { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.entity-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.located-badge { font-size: 12px; color: #67c23a; }
+.located-card { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; margin-bottom: 6px; background: #fff; border-radius: 6px; cursor: pointer; }
+.located-card:hover { background: #f0f9ff; }
+.located-card.is-manual { border-left: 3px solid #f97316; }
+.located-info { display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden; }
+.located-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.located-actions { display: flex; gap: 4px; }
+.map-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.map-canvas { flex: 1; border-radius: 10px; overflow: hidden; background: #f5f7fa; position: relative; min-height: 500px; }
+.placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #999; }
+.map-footer { padding: 8px 0; display: flex; justify-content: space-between; align-items: center; }
+.legend { display: flex; gap: 16px; font-size: 12px; color: #666; }
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.marker-dot { width: 10px; height: 10px; border-radius: 50%; }
+.marker-dot.llm { background: #3b82f6; }
+.marker-dot.manual { background: #f97316; }
+.tip { font-size: 12px; color: #409eff; }
+.empty-tip { text-align: center; color: #999; font-size: 12px; padding: 20px; }
 </style>

@@ -12,4 +12,5 @@ public class GeoPointDto {
   private Double longitude;
   private String source;
   private String note;
+  private String category;
 }
