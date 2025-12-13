@@ -643,8 +643,8 @@ const handleAutoLocate = async () => {
       console.warn("[MapView] handleAutoLocate: No text selected");
       return;
     }
-    // 优先使用 LOCATION 类型实体，如果没有则使用所有实体
-    const sourceList = locationList.value.length > 0 ? locationList.value : allEntityList.value;
+    // 自动标注：对所有实体都尝试映射到一个现代可搜索地点（不限制为 LOCATION）
+    const sourceList = allEntityList.value;
     const entities = (sourceList || []).map((e) => ({
       id: e.id,
       label: e.label || e.name,
