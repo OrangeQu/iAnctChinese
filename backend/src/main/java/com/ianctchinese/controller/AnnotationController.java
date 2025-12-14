@@ -9,7 +9,9 @@ import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,5 +43,17 @@ public class AnnotationController {
   @GetMapping("/relations")
   public ResponseEntity<List<RelationAnnotation>> listRelations(@RequestParam("textId") Long textId) {
     return ResponseEntity.ok(annotationService.getRelations(textId));
+  }
+
+  @DeleteMapping("/entities/{id}")
+  public ResponseEntity<Void> deleteEntity(@PathVariable("id") Long id) {
+    annotationService.deleteEntity(id);
+    return ResponseEntity.noContent().build();
+  }
+
+  @DeleteMapping("/relations/{id}")
+  public ResponseEntity<Void> deleteRelation(@PathVariable("id") Long id) {
+    annotationService.deleteRelation(id);
+    return ResponseEntity.noContent().build();
   }
 }

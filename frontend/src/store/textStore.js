@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { fetchTexts, fetchTextById, uploadText, updateTextCategory, exportText, deleteText as deleteTextApi, updateText as updateTextApi } from "@/api/texts";
-import { fetchEntities, fetchRelations, createEntity, createRelation } from "@/api/annotations";
+import { fetchEntities, fetchRelations, createEntity, createRelation, deleteEntity as deleteEntityApi, deleteRelation as deleteRelationApi } from "@/api/annotations";
 import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi } from "@/api/analysis";
 import { fetchSections, autoSegment, updateSection as updateSectionApi } from "@/api/sections";
 import { fetchNavigationTree } from "@/api/navigation";
@@ -140,6 +140,30 @@ export const useTextStore = defineStore("textStore", {
       const exists = this.relations.some((r) => r.id === created.id);
       this.relations = exists ? this.relations : [...this.relations, created];
       this.filters.entityCategories = [...this.entityOptions];
+      this.filters.relationTypes = [...this.relationOptions];
+    },
+    async deleteEntityAnnotation(entityId) {
+      if (!entityId) {
+        return;
+      }
+      await deleteEntityApi(entityId);
+      const targetId = String(entityId);
+      this.entities = this.entities.filter((entity) => String(entity.id) !== targetId);
+      this.relations = this.relations.filter((relation) => {
+        const sourceId = relation.source?.id || relation.sourceEntityId;
+        const target = relation.target?.id || relation.targetEntityId;
+        return String(sourceId) !== targetId && String(target) !== targetId;
+      });
+      this.filters.entityCategories = [...this.entityOptions];
+      this.filters.relationTypes = [...this.relationOptions];
+    },
+    async deleteRelationAnnotation(relationId) {
+      if (!relationId) {
+        return;
+      }
+      await deleteRelationApi(relationId);
+      const targetId = String(relationId);
+      this.relations = this.relations.filter((relation) => String(relation.id) !== targetId);
       this.filters.relationTypes = [...this.relationOptions];
     },
     async classifySelectedText(model) {

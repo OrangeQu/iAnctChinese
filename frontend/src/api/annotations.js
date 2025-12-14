@@ -15,3 +15,11 @@ export const createEntity = (payload) => {
 export const createRelation = (payload) => {
   return apiClient.post("/annotations/relations", payload);
 };
+
+export const deleteEntity = (id) => {
+  return apiClient.delete(`/annotations/entities/${id}`);
+};
+
+export const deleteRelation = (id) => {
+  return apiClient.delete(`/annotations/relations/${id}`);
+};

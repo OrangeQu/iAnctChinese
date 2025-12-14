@@ -68,4 +68,23 @@ public class AnnotationServiceImpl implements AnnotationService {
   public List<RelationAnnotation> getRelations(Long textId) {
     return relationRepository.findByTextDocumentId(textId);
   }
+
+  @Override
+  @Transactional
+  public void deleteEntity(Long entityId) {
+    EntityAnnotation entity = entityRepository.findById(entityId)
+        .orElseThrow(() -> new IllegalArgumentException("Entity not found: " + entityId));
+    // Cascade delete relations involving the entity to keep graph consistent.
+    relationRepository.deleteBySourceIdOrTargetId(entityId, entityId);
+    entityRepository.delete(entity);
+  }
+
+  @Override
+  @Transactional
+  public void deleteRelation(Long relationId) {
+    if (!relationRepository.existsById(relationId)) {
+      throw new IllegalArgumentException("Relation not found: " + relationId);
+    }
+    relationRepository.deleteById(relationId);
+  }
 }

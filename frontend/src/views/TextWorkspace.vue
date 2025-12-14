@@ -16,8 +16,6 @@
               placeholder="字号">
               <el-option v-for="size in fontSizeOptions" :key="size" :label="size + 'px'" :value="size" />
             </el-select>
-            <el-button size="small" @click="handleUndo">撤销</el-button>
-            <el-button size="small" @click="handleRedo">恢复</el-button>
           </div>
           <div class="toolbar-right">
             <el-tooltip content="手动在当前位置添加阅读标记" placement="bottom">
@@ -32,7 +30,8 @@
           </div>
         </div>
         <div v-if="store.selectedText" class="editor-wrapper">
-          <EditorContent :editor="editor" class="text-editor" :style="{ fontSize: currentFontSize + 'px' }" />
+          <EditorContent :editor="editor" class="text-editor" :style="{ fontSize: currentFontSize + 'px' }"
+            @contextmenu="handleEditorContextMenu" />
         </div>
         <p v-else class="placeholder">请先上传文言文或从左侧列表选择一篇文稿</p>
         <el-divider />
@@ -172,6 +171,18 @@
         <p v-else class="placeholder">暂无句读分段，请先自动推荐或手动新增</p>
       </section>
     </div>
+    <div v-if="entityContextMenu.visible" class="entity-context-menu" :style="entityContextMenuStyle"
+      @click.stop @contextmenu.prevent>
+      <div class="menu-title">删除实体</div>
+      <div class="menu-entity">
+        <span class="menu-label">{{ entityContextMenu.label || "未命名实体" }}</span>
+        <span v-if="entityContextMenu.category" class="menu-tag">{{ translateCategoryLabel(entityContextMenu.category) }}</span>
+      </div>
+      <div class="menu-actions">
+        <el-button size="small" @click="closeEntityContextMenu">取消</el-button>
+        <el-button size="small" type="danger" :loading="deletingEntity" @click="confirmEntityDelete">确认删除</el-button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -295,6 +306,20 @@ const activeEntityId = ref(null);
 const entityDrawerVisible = ref(false);
 const allowHighlights = ref(false);
 const suppressSelectionUpdate = ref(false);
+const deletingEntity = ref(false);
+const entityContextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  entityId: null,
+  label: "",
+  category: ""
+});
+
+const entityContextMenuStyle = computed(() => ({
+  top: `${entityContextMenu.y}px`,
+  left: `${entityContextMenu.x}px`
+}));
 
 const entityForm = reactive({
   label: "",
@@ -574,12 +599,49 @@ const applyFontSize = (size) => {
   currentFontSize.value = size;
 };
 
-const handleUndo = () => {
-  editor.value?.chain().focus().undo().run();
+const closeEntityContextMenu = () => {
+  entityContextMenu.visible = false;
+  entityContextMenu.entityId = null;
 };
 
-const handleRedo = () => {
-  editor.value?.chain().focus().redo().run();
+const handleEditorContextMenu = (event) => {
+  const target = event.target?.closest?.(".ner-entity");
+  if (!target) {
+    closeEntityContextMenu();
+    return;
+  }
+  event.preventDefault();
+  entityContextMenu.x = event.clientX;
+  entityContextMenu.y = event.clientY;
+  entityContextMenu.entityId = target.getAttribute("data-entity-id");
+  entityContextMenu.label = target.getAttribute("data-entity-label") || target.textContent || "";
+  entityContextMenu.category = target.getAttribute("data-entity-category") || "";
+  entityContextMenu.visible = true;
+};
+
+const handleGlobalClick = (event) => {
+  if (!entityContextMenu.visible) return;
+  if (event.target?.closest?.(".entity-context-menu")) return;
+  closeEntityContextMenu();
+};
+
+const confirmEntityDelete = async () => {
+  if (!entityContextMenu.entityId) return;
+  deletingEntity.value = true;
+  try {
+    await store.deleteEntityAnnotation(entityContextMenu.entityId);
+    if (activeEntityId.value && String(activeEntityId.value) === String(entityContextMenu.entityId)) {
+      activeEntityId.value = null;
+    }
+    closeEntityContextMenu();
+    nextTick(applyEntityHighlight);
+    ElMessage.success("实体已删除");
+  } catch (error) {
+    console.error("delete entity failed", error);
+    ElMessage.error("删除实体失败，请稍后重试");
+  } finally {
+    deletingEntity.value = false;
+  }
 };
 
 const applyBookmarkDecoration = () => {
@@ -621,6 +683,7 @@ onMounted(() => {
     store.selectText(numId);
   }
   loadBookmark();
+  window.addEventListener("click", handleGlobalClick);
 });
 
 onActivated(() => {
@@ -780,6 +843,8 @@ watch(
     entityForm.label = "";
     entityForm.startOffset = 0;
     entityForm.endOffset = 0;
+    activeEntityId.value = null;
+    closeEntityContextMenu();
     loadBookmark();
     applyBookmarkDecoration();
   }
@@ -993,6 +1058,7 @@ const translateRelationLabel = (rel) => {
 };
 
 onBeforeUnmount(() => {
+  window.removeEventListener("click", handleGlobalClick);
   editor.value?.destroy();
 });
 
@@ -1236,6 +1302,50 @@ onMounted(() => {
 .text-editor :deep(.ner-entity:not([data-entity-category])) {
   background: rgba(229, 231, 235, 0.6);
   color: #111827;
+}
+
+.entity-context-menu {
+  position: fixed;
+  z-index: 2000;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  padding: 12px;
+  width: 220px;
+}
+
+.entity-context-menu .menu-title {
+  font-weight: 700;
+  color: #b91c1c;
+  margin-bottom: 8px;
+}
+
+.entity-context-menu .menu-entity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.entity-context-menu .menu-label {
+  color: #111827;
+  font-weight: 600;
+}
+
+.entity-context-menu .menu-tag {
+  font-size: 12px;
+  color: #4b5563;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.entity-context-menu .menu-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .entity-drawer {

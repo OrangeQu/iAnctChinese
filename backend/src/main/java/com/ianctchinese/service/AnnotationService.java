@@ -15,4 +15,8 @@ public interface AnnotationService {
   List<EntityAnnotation> getEntities(Long textId);
 
   List<RelationAnnotation> getRelations(Long textId);
+
+  void deleteEntity(Long entityId);
+
+  void deleteRelation(Long relationId);
 }
