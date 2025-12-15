@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="workspace">
     <div class="stage-grid">
       <aside class="panel text-panel">
@@ -40,15 +40,11 @@
             <el-option v-for="item in llmModels" :key="item.id"
               :label="item.isThinking ? `【深度思考】${item.label}` : item.label" :value="item.id" />
           </el-select>
-          <el-button type="primary" :loading="store.analysisRunning" @click="handleFullAnalysis">
-            触发模型分析
-          </el-button>
-          <el-button type="success" plain :loading="savingContent" @click="handleContentSave(true)">
-            保存原文
-          </el-button>
-          <el-button type="warning" plain :loading="store.classifyRunning" @click="handleClassify">
-            大模型判断类型
-          </el-button>
+          <el-button type="primary" :loading="segmenting" @click="handleAutoSegment">分段句读</el-button>
+          <el-button type="success" plain :loading="extractingEntities" @click="handleExtractEntities">提取实体</el-button>
+          <el-button type="info" plain :loading="extractingRelations" @click="handleExtractRelations">提取关系</el-button>
+          <el-button :loading="savingContent" @click="handleContentSave(true)">保存原文</el-button>
+          <el-button type="warning" plain :loading="store.classifyRunning" @click="handleClassify">大模型判断类型</el-button>
         </div>
         <div v-if="store.classification?.suggestedCategory" class="classification-tip">
           <el-alert title="模型分析建议" type="info" :closable="false" show-icon>
@@ -302,6 +298,9 @@ const llmModels = [
 const selectedModel = ref(llmModels[0].id);
 const editableContent = ref("");
 const savingContent = ref(false);
+const segmenting = ref(false);
+const extractingEntities = ref(false);
+const extractingRelations = ref(false);
 const activeEntityId = ref(null);
 const entityDrawerVisible = ref(false);
 const allowHighlights = ref(false);
@@ -973,8 +972,18 @@ const submitRelation = async () => {
 };
 
 const handleAutoSegment = async () => {
-  await store.autoSegmentSections();
-  ElMessage.success("已重新生成句读结果");
+  if (!store.selectedTextId) return;
+  segmenting.value = true;
+  try {
+    await handleContentSave(true);
+    await store.autoSegmentSections();
+    ElMessage.success("已重新生成句读结果");
+  } catch (error) {
+    console.error("auto segment failed", error);
+    ElMessage.error("句读生成失败，请稍后重试");
+  } finally {
+    segmenting.value = false;
+  }
 };
 
 const handleUpdateSection = async (section) => {
@@ -984,6 +993,34 @@ const handleUpdateSection = async (section) => {
     summary: section.summary
   });
   ElMessage.success("句读内容已更新");
+};
+
+const handleExtractEntities = async () => {
+  extractingEntities.value = true;
+  try {
+    await handleContentSave(true);
+    await store.triggerAutoAnnotation();
+    ElMessage.success("实体已提取");
+  } catch (error) {
+    console.error("extract entities failed", error);
+    ElMessage.error("提取实体失败，请稍后重试");
+  } finally {
+    extractingEntities.value = false;
+  }
+};
+
+const handleExtractRelations = async () => {
+  extractingRelations.value = true;
+  try {
+    await handleContentSave(true);
+    await store.triggerAutoAnnotation();
+    ElMessage.success("关系已提取");
+  } catch (error) {
+    console.error("extract relations failed", error);
+    ElMessage.error("提取关系失败，请稍后重试");
+  } finally {
+    extractingRelations.value = false;
+  }
 };
 
 const handleFullAnalysis = async () => {

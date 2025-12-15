@@ -86,17 +86,8 @@ public class SiliconFlowClient {
   }
 
   public AnnotationPayload annotateText(String textContent, String modelName) {
-    // 之前截断到 3000 字会导致只分析开头几句；这里放宽到 12000 字，超长时按段落截断，避免全局丢失
-    String limitedContent = textContent;
-    if (textContent != null && textContent.length() > 12000) {
-      int cut = Math.min(textContent.length(), 12000);
-      // 尝试在接近 cut 的位置按句断开，减少语义断裂
-      int softCut = textContent.lastIndexOf("。", cut);
-      if (softCut < 0 || softCut < 6000) {
-        softCut = cut;
-      }
-      limitedContent = textContent.substring(0, softCut);
-    }
+    // 使用全文，避免只分析开头
+    String limitedContent = textContent == null ? "" : textContent;
 
     String systemPrompt = """
         You are a classical-Chinese IE assistant. Extract entities and relations.
@@ -245,7 +236,7 @@ public class SiliconFlowClient {
               new Message("user", userPrompt)
           ),
           0.2,
-          4096
+          8192
       );
     }
   }
