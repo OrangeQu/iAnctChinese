@@ -266,7 +266,7 @@ onMounted(async () => {
   }
   const routeId = Number(route.params.id);
   if (routeId) {
-    await store.selectText(routeId);
+    await store.selectText(routeId, { force: true });
   }
 });
 

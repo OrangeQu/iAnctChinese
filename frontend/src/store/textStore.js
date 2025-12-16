@@ -64,11 +64,11 @@ export const useTextStore = defineStore("textStore", {
         this.loading = false;
       }
     },
-    async selectText(id) {
+    async selectText(id, { force = false } = {}) {
       if (!id) {
         return;
       }
-      if (id === this.selectedTextId && this.selectedText && !this.detailLoading) {
+      if (!force && id === this.selectedTextId && this.selectedText && !this.detailLoading) {
         // 已有当前文档的数据，避免重复请求导致卡顿
         return;
       }
@@ -179,7 +179,7 @@ export const useTextStore = defineStore("textStore", {
       }
       this.loading = true;
       try {
-        await this.selectText(this.selectedTextId);
+        await this.selectText(this.selectedTextId, { force: true });
       } finally {
         this.loading = false;
       }
