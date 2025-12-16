@@ -82,7 +82,11 @@
           </div>
           <el-table :data="entities" border size="small" height="220">
             <el-table-column prop="label" label="实体" width="140" />
-            <el-table-column prop="category" label="类别" width="120" />
+            <el-table-column label="类别" width="120">
+              <template #default="{ row }">
+                {{ translateCategoryLabel(row.category) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="confidence" label="置信度" />
           </el-table>
           <el-drawer v-model="entityDrawerVisible" title="实体列表（按类别）" direction="rtl" size="30%">
@@ -1054,6 +1058,9 @@ const translateCategory = (category) => {
     warfare: "战争纪实",
     travelogue: "游记地理",
     biography: "人物传记",
+    official: "官职体系",
+    agriculture: "农书类",
+    crafts: "工艺技术",
     unknown: "待识别",
     other: "其他"
   };
