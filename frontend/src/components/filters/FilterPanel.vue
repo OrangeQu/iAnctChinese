@@ -35,7 +35,7 @@
       v-if="showRelationFilters"
       v-model="localFilters.highlightOnly"
       inline-prompt
-      active-text="只显示高亮实体"
+      active-text="显示有关系实体"
       inactive-text="显示全部"
       @change="emitFilters"
     />

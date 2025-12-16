@@ -144,7 +144,7 @@
 
         <!-- 右侧实体面板（地图视图时隐藏，因为 MapView 组件有自己的实体列表） -->
         <section class="panel right-panel" v-if="viewType !== 'map' && viewType !== 'historyMap'">
-          <h3 class="section-title">可用实体</h3>
+          <h3 class="section-title">实体列表</h3>
           <div v-if="availableEntitiesPanel.length === 0" class="empty-tip">暂无实体</div>
           <div
             v-for="entity in availableEntitiesPanel"

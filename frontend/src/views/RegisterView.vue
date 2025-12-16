@@ -171,7 +171,7 @@ const handleRegister = async () => {
         const result = await authStore.register(registerData);
         if (result.success) {
           ElMessage.success(result.message);
-          router.push('/documents');
+          router.push('/login');
         } else {
           ElMessage.error(result.message);
         }
