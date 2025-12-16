@@ -13,18 +13,11 @@ export const useAuthStore = defineStore('auth', {
     async register(registerData) {
       try {
         const response = await authApi.register(registerData);
-        if (response.data.token) {
-          this.token = response.data.token;
-          this.user = {
-            username: response.data.username,
-            email: response.data.email
-          };
-          this.isAuthenticated = true;
-          localStorage.setItem('token', this.token);
-          return { success: true, message: response.data.message };
-        } else {
-          return { success: false, message: response.data.message };
+        // 注册成功后不直接登录，提示用户前往登录页面
+        if (response?.data) {
+          return { success: true, message: response.data.message || '注册成功，请登录' };
         }
+        return { success: false, message: '注册失败，请稍后重试' };
       } catch (error) {
         const message = error.response?.data?.message || '注册失败';
         return { success: false, message };
