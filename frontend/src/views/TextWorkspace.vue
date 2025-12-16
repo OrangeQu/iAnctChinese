@@ -666,31 +666,29 @@ const applyBookmarkDecoration = () => {
   ed.view.dispatch(tr);
 };
 
+const ensureTextLoaded = (rawId) => {
+  const numId = Number(rawId);
+  if (!numId) return;
+  if (store.selectedTextId !== numId || !store.selectedText) {
+    store.selectText(numId);
+  }
+};
+
 watch(
   () => route.params.id,
   (id) => {
-    const numId = Number(id);
-    if (numId && numId !== store.selectedTextId) {
-      store.selectText(numId);
-    }
-  },
-  { immediate: true }
+    ensureTextLoaded(id);
+  }
 );
 
 onMounted(() => {
-  const numId = Number(route.params.id);
-  if (numId) {
-    store.selectText(numId);
-  }
+  ensureTextLoaded(route.params.id);
   loadBookmark();
   window.addEventListener("click", handleGlobalClick);
 });
 
 onActivated(() => {
-  const numId = Number(route.params.id);
-  if (numId) {
-    store.selectText(numId);
-  }
+  ensureTextLoaded(route.params.id);
 });
 
 const groupedEntities = computed(() => {

@@ -33,9 +33,11 @@
     </div>
 
     <!-- 1. 结构化阶段 -->
-    <div v-if="stage === 'structure'" class="stage-content">
-      <TextWorkspace />
-    </div>
+    <template v-if="stage === 'structure'">
+      <KeepAlive>
+        <TextWorkspace class="stage-content" />
+      </KeepAlive>
+    </template>
 
     <!-- 2. 统计分析阶段 -->
     <div v-else-if="stage === 'analysis'" class="analysis-stage" v-loading="isDataLoading">
@@ -262,13 +264,15 @@ onMounted(async () => {
   if (!store.selectedTextId && store.texts.length) {
     await store.selectText(store.texts[0].id);
   }
-  if (route.params.id) {
-    await store.selectText(route.params.id);
+  const routeId = Number(route.params.id);
+  if (routeId) {
+    await store.selectText(routeId);
   }
 });
 
 watch(() => route.params.id, async (id) => {
-  if (id) await store.selectText(id);
+  const numId = Number(id);
+  if (numId) await store.selectText(numId);
 });
 
 // 选中文本后，确保当前视图合法且不抢占已有选择
