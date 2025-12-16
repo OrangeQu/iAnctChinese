@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { fetchTexts, fetchTextById, uploadText, updateTextCategory, exportText, deleteText as deleteTextApi, updateText as updateTextApi } from "@/api/texts";
 import { fetchEntities, fetchRelations, createEntity, createRelation, deleteEntity as deleteEntityApi, deleteRelation as deleteRelationApi } from "@/api/annotations";
 import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi } from "@/api/analysis";
-import { fetchSections, autoSegment, updateSection as updateSectionApi } from "@/api/sections";
+import { fetchSections, updateSection as updateSectionApi } from "@/api/sections";
 import { fetchNavigationTree } from "@/api/navigation";
 import { searchTexts } from "@/api/search";
 
@@ -255,13 +255,6 @@ export const useTextStore = defineStore("textStore", {
     },
     setRelationFilters(values) {
       this.filters.relationTypes = values;
-    },
-    async autoSegmentSections() {
-      if (!this.selectedTextId) {
-        return;
-      }
-      const { data } = await autoSegment(this.selectedTextId);
-      this.sections = data;
     },
     async updateSection(sectionId, payload) {
       const { data } = await updateSectionApi(sectionId, payload);

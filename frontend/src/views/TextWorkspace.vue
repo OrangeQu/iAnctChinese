@@ -40,7 +40,6 @@
             <el-option v-for="item in llmModels" :key="item.id"
               :label="item.isThinking ? `【深度思考】${item.label}` : item.label" :value="item.id" />
           </el-select>
-          <el-button type="primary" :loading="segmenting" @click="handleAutoSegment">分段句读</el-button>
           <el-button type="success" plain :loading="extractingEntities" @click="handleExtractEntities">提取实体</el-button>
           <el-button type="info" plain :loading="extractingRelations" @click="handleExtractRelations">提取关系</el-button>
           <el-button :loading="savingContent" @click="handleContentSave(true)">保存原文</el-button>
@@ -147,24 +146,18 @@
 
       <section class="panel sentence-panel">
         <h3 class="section-title">句读/分段</h3>
-        <div class="section-actions">
-          <el-button size="small" @click="handleAutoSegment">自动推荐句读</el-button>
-        </div>
         <div class="segments" v-if="sections.length">
           <div v-for="section in sections" :key="section.id" class="segment-card">
-            <div class="segment-col">
-              <div class="segment-label">原文</div>
-              <div class="segment-text original">{{ section.originalText || "（空）" }}</div>
-            </div>
-            <div class="segment-col">
-              <div class="segment-label">句读</div>
-              <el-input type="textarea" v-model="section.punctuatedText" :autosize="{ minRows: 3, maxRows: 6 }"
-                placeholder="添加句读" @blur="handleUpdateSection(section)" />
-            </div>
-            <div class="segment-col">
-              <div class="segment-label">摘要</div>
-              <el-input type="textarea" v-model="section.summary" :autosize="{ minRows: 3, maxRows: 6 }"
-                placeholder="一句话摘要" @blur="handleUpdateSection(section)" />
+            <div class="segment-row">
+              <div class="segment-col">
+                <div class="segment-label">原文</div>
+                <div class="segment-text original">{{ section.originalText || "（空）" }}</div>
+              </div>
+              <div class="segment-col">
+                <div class="segment-label">句读</div>
+                <el-input type="textarea" v-model="section.punctuatedText" :autosize="{ minRows: 3, maxRows: 6 }"
+                  placeholder="添加句读" @blur="handleUpdateSection(section)" />
+              </div>
             </div>
           </div>
         </div>
@@ -302,7 +295,6 @@ const llmModels = [
 const selectedModel = ref(llmModels[0].id);
 const editableContent = ref("");
 const savingContent = ref(false);
-const segmenting = ref(false);
 const extractingEntities = ref(false);
 const extractingRelations = ref(false);
 const activeEntityId = ref(null);
@@ -975,21 +967,6 @@ const submitRelation = async () => {
   }
 };
 
-const handleAutoSegment = async () => {
-  if (!store.selectedTextId) return;
-  segmenting.value = true;
-  try {
-    await handleContentSave(true);
-    await store.autoSegmentSections();
-    ElMessage.success("已重新生成句读结果");
-  } catch (error) {
-    console.error("auto segment failed", error);
-    ElMessage.error("句读生成失败，请稍后重试");
-  } finally {
-    segmenting.value = false;
-  }
-};
-
 const handleUpdateSection = async (section) => {
   await store.updateSection(section.id, {
     originalText: section.originalText,
@@ -1263,41 +1240,64 @@ onMounted(() => {
 .segments {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
+  margin-top: 12px;
 }
 
 .segment-card {
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 12px;
-  padding: 14px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+  background: linear-gradient(135deg, #fff9f2 0%, #ffffff 65%);
+  border: 1px solid rgba(212, 188, 162, 0.6);
+  border-radius: 18px;
+  padding: 18px 22px;
+  box-shadow: 0 18px 36px rgba(92, 70, 47, 0.08);
+}
+
+.segment-row {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 26px;
 }
 
 .segment-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .segment-label {
   font-weight: 600;
-  color: #8c7a6b;
-  font-size: 13px;
+  color: #ad855c;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .segment-text {
-  background: #f9f7f2;
-  border: 1px solid #f1ede4;
-  border-radius: 10px;
-  padding: 10px 12px;
-  line-height: 1.6;
-  color: #4a443e;
-  min-height: 88px;
+  background: #fdf7ef;
+  border: 1px solid rgba(222, 196, 168, 0.6);
+  border-radius: 14px;
+  padding: 12px 16px;
+  line-height: 1.7;
+  color: #4a3c2f;
+  min-height: 90px;
   white-space: pre-wrap;
+}
+
+.segment-card :deep(.el-textarea__inner) {
+  border-radius: 14px;
+  border: 1px solid rgba(180, 149, 114, 0.4);
+  background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  min-height: 90px;
+  font-size: 16px;
+  line-height: 1.7;
+  padding: 12px 16px;
+}
+
+.segment-card :deep(.el-textarea__inner:focus) {
+  border-color: #d19d63;
+  box-shadow: 0 0 0 3px rgba(209, 157, 99, 0.2);
 }
 
 .text-editor :deep(.ner-entity) {
