@@ -197,9 +197,7 @@ const handleChangePassword = () => {
 };
 
 onMounted(() => {
-  if (!authStore.user) {
-    fetchProfile();
-  }
+  fetchProfile();
 });
 </script>
 

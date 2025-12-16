@@ -78,7 +78,7 @@
             <el-button type="primary" plain size="small" @click="entityDrawerVisible = true">
               抽屉查看（按类别分组）
             </el-button>
-            <span class="entity-hint">在原文中框选片段再点“添加实体”，即可直接高亮标注</span>
+            <span class="entity-hint">在原文中框选片段再点“添加实体”，可直接高亮标注！鼠标右键点击可删除实体！</span>
           </div>
           <el-table :data="entities" border size="small" height="220">
             <el-table-column prop="label" label="实体" width="140" />
