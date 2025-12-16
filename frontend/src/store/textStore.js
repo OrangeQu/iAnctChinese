@@ -17,6 +17,9 @@ export const useTextStore = defineStore("textStore", {
     insights: null,
     classification: null,
     sections: [],
+    detailLoading: false,
+    detailProgress: 0,
+    currentRequestToken: null,
     navigationTree: null,
     searchResults: [],
     searchVersion: 0,
@@ -65,33 +68,86 @@ export const useTextStore = defineStore("textStore", {
       if (!id) {
         return;
       }
-      if (id === this.selectedTextId && this.selectedText) {
+      if (id === this.selectedTextId && this.selectedText && !this.detailLoading) {
         // 已有当前文档的数据，避免重复请求导致卡顿
         return;
       }
+      const requestToken = Symbol("textRequest");
+      this.currentRequestToken = requestToken;
       this.selectedTextId = id;
       this.loading = true;
+      this.detailLoading = true;
+      this.detailProgress = 0;
       try {
         // 先拿正文，尽快渲染基础页面，再异步拉其他数据，避免整页长时间 loading
         const { data: text } = await fetchTextById(id);
+        if (this.currentRequestToken !== requestToken) {
+          return;
+        }
         this.selectedText = text;
-        this.loading = false;
+        this.detailProgress = 20;
 
-        Promise.allSettled([
-          fetchEntities(id),
-          fetchRelations(id),
-          fetchInsights(id, { light: true }),
-          fetchSections(id)
-        ]).then((results) => {
-          this.entities = results[0].status === "fulfilled" ? results[0].value.data : [];
-          this.relations = results[1].status === "fulfilled" ? results[1].value.data : [];
-          this.insights = results[2].status === "fulfilled" ? results[2].value.data : null;
-          this.sections = results[3].status === "fulfilled" ? results[3].value.data : [];
-          this.filters.entityCategories = [...this.entityOptions];
-          this.filters.relationTypes = [...this.relationOptions];
-        });
+        let entities = [];
+        try {
+          const { data } = await fetchEntities(id);
+          entities = data;
+        } catch (error) {
+          console.error("fetch entities failed", error);
+        }
+        if (this.currentRequestToken !== requestToken) {
+          return;
+        }
+        this.entities = entities;
+        this.detailProgress = 40;
+
+        let relations = [];
+        try {
+          const { data } = await fetchRelations(id);
+          relations = data;
+        } catch (error) {
+          console.error("fetch relations failed", error);
+        }
+        if (this.currentRequestToken !== requestToken) {
+          return;
+        }
+        this.relations = relations;
+        this.detailProgress = 60;
+
+        let insights = null;
+        try {
+          const { data } = await fetchInsights(id, { light: true });
+          insights = data;
+        } catch (error) {
+          console.error("fetch insights failed", error);
+        }
+        if (this.currentRequestToken !== requestToken) {
+          return;
+        }
+        this.insights = insights;
+        this.detailProgress = 80;
+
+        let sections = [];
+        try {
+          const { data } = await fetchSections(id);
+          sections = data;
+        } catch (error) {
+          console.error("fetch sections failed", error);
+        }
+        if (this.currentRequestToken !== requestToken) {
+          return;
+        }
+        this.sections = sections;
+        this.detailProgress = 100;
+        this.filters.entityCategories = [...this.entityOptions];
+        this.filters.relationTypes = [...this.relationOptions];
       } finally {
-        this.loading = false;
+        if (this.currentRequestToken === requestToken) {
+          this.loading = false;
+          this.detailLoading = false;
+          if (this.detailProgress < 100) {
+            this.detailProgress = 100;
+          }
+        }
       }
     },
     async uploadNewText(payload) {
@@ -108,6 +164,9 @@ export const useTextStore = defineStore("textStore", {
         this.relations = [];
         this.sections = [];
         this.texts.unshift(data);
+        this.detailLoading = false;
+        this.detailProgress = 0;
+        this.currentRequestToken = null;
         await this.loadNavigationTree();
         return data;
       } finally {

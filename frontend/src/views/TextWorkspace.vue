@@ -1,6 +1,11 @@
 ﻿<template>
   <div class="workspace">
-    <div class="stage-grid">
+    <div class="stage-grid" :class="{ 'grid-loading-active': store.detailLoading }">
+      <div v-if="store.detailLoading" class="loading-overlay">
+        <div class="loading-spinner-ring"></div>
+        <p class="loading-text">读取文档数据：{{ store.detailProgress }}%</p>
+        <el-progress class="loading-progress" :percentage="store.detailProgress" :stroke-width="6" />
+      </div>
       <aside class="panel text-panel">
         <div class="panel-head">
           <h3 class="section-title">原文</h3>
@@ -1103,6 +1108,53 @@ onMounted(() => {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   align-items: stretch;
+  min-height: 420px;
+  position: relative;
+}
+
+.grid-loading-active {
+  pointer-events: none;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: 40px;
+}
+
+.loading-spinner-ring {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(76, 125, 255, 0.2);
+  border-top-color: #4c7dff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.loading-text {
+  margin: 0;
+  font-weight: 600;
+  color: #5f6368;
+}
+
+.loading-progress {
+  width: 260px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .panel {
@@ -1120,6 +1172,7 @@ onMounted(() => {
 .sentence-panel {
   grid-column: 1 / -1;
   margin-top: 50px;
+  min-height: 200px;
 }
 
 @media (max-width: 1200px) {
