@@ -178,6 +178,10 @@ const handleUpdateEmail = () => {
 const handleChangePassword = () => {
   passwordFormRef.value.validate(async (valid) => {
     if (!valid) return;
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      ElMessage.error("新密码与原密码相同");
+      return;
+    }
     passwordUpdating.value = true;
     const payload = {
       currentPassword: passwordForm.currentPassword,
