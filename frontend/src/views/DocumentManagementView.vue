@@ -63,7 +63,7 @@
         <el-table-column label="操作" width="360">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="openDocument(row)">进入文档</el-button>
-            <el-button size="small" type="success" plain @click="openEditDialog(row)">分析工作台</el-button>
+            <el-button size="small" type="success" plain @click="openEditDialog(row)">编辑文档</el-button>
             <el-popconfirm
               title="删除后不可恢复，确认删除该文档？"
               confirm-button-text="删除"
