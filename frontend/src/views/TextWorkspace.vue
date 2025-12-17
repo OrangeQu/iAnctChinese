@@ -983,7 +983,7 @@ const handleExtractEntities = async () => {
   extractingEntities.value = true;
   try {
     await handleContentSave(true);
-    await store.triggerAutoAnnotation();
+    await store.triggerAutoAnnotation(selectedModel.value);
     ElMessage.success("实体已提取");
   } catch (error) {
     console.error("extract entities failed", error);
@@ -997,7 +997,7 @@ const handleExtractRelations = async () => {
   extractingRelations.value = true;
   try {
     await handleContentSave(true);
-    await store.triggerAutoAnnotation();
+    await store.triggerAutoAnnotation(selectedModel.value);
     ElMessage.success("关系已提取");
   } catch (error) {
     console.error("extract relations failed", error);

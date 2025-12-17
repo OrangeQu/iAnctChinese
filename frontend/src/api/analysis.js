@@ -6,8 +6,10 @@ export const classifyText = (textId, model) => {
   });
 };
 
-export const autoAnnotate = (textId) => {
-  return apiClient.post(`/analysis/${textId}/auto-annotate`);
+export const autoAnnotate = (textId, model) => {
+  return apiClient.post(`/analysis/${textId}/auto-annotate`, null, {
+    params: model ? { model } : {}
+  });
 };
 
 export const fetchInsights = (textId, params = {}) => {

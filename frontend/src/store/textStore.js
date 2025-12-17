@@ -247,12 +247,12 @@ export const useTextStore = defineStore("textStore", {
         this.classifyRunning = false;
       }
     },
-    async triggerAutoAnnotation() {
+    async triggerAutoAnnotation(model) {
       if (!this.selectedTextId) {
         return;
       }
-      await autoAnnotate(this.selectedTextId);
-      await this.selectText(this.selectedTextId);
+      await autoAnnotate(this.selectedTextId, model);
+      await this.selectText(this.selectedTextId, { force: true });
     },
     async runFullAnalysis(model) {
       if (!this.selectedTextId) {

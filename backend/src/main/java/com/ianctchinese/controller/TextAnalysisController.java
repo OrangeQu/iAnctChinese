@@ -28,8 +28,9 @@ public class TextAnalysisController {
   }
 
   @PostMapping("/{textId}/auto-annotate")
-  public ResponseEntity<AutoAnnotationResponse> autoAnnotate(@PathVariable("textId") Long textId) {
-    return ResponseEntity.ok(analysisService.autoAnnotate(textId));
+  public ResponseEntity<AutoAnnotationResponse> autoAnnotate(@PathVariable("textId") Long textId,
+      @RequestParam(value = "model", required = false) String model) {
+    return ResponseEntity.ok(analysisService.autoAnnotate(textId, model));
   }
 
   @PostMapping("/{textId}/full")

@@ -35,7 +35,7 @@ public class TextDocument {
   @Column(nullable = false)
   private String title;
 
-  @Column(nullable = false, length = 8192)
+  @Column(nullable = false, columnDefinition = "LONGTEXT")
   private String content;
 
   @Column(length = 2048)

@@ -15,7 +15,7 @@ public interface AnalysisService {
 
   TextInsightsResponse buildInsights(Long textId, boolean light);
 
-  AutoAnnotationResponse autoAnnotate(Long textId);
+  AutoAnnotationResponse autoAnnotate(Long textId, String model);
 
   ModelAnalysisResponse runFullAnalysis(Long textId, String model);
 }

@@ -216,9 +216,9 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   @Override
   @Transactional
-  public AutoAnnotationResponse autoAnnotate(Long textId) {
+  public AutoAnnotationResponse autoAnnotate(Long textId, String model) {
     TextDocument document = loadText(textId);
-    AnnotationPayload payload = siliconFlowClient.annotateText(document.getContent(), null);
+    AnnotationPayload payload = siliconFlowClient.annotateText(document.getContent(), model);
     relationAnnotationRepository.deleteByTextDocumentId(textId);
     entityAnnotationRepository.deleteByTextDocumentId(textId);
 
