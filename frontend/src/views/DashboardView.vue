@@ -52,7 +52,8 @@
 
     <!-- 3. 知识图谱与可视化阶段 -->
     <div v-else class="graph-stage">
-      <div class="graph-grid" v-loading="isDataLoading" ref="graphGridRef" :style="{ height: graphGridHeight + 'px' }">
+      <div class="graph-grid" v-loading="isDataLoading" ref="graphGridRef"
+        :class="{ 'no-right-panel': !isRightPanelVisible }" :style="{ height: graphGridHeight + 'px' }">
         <section class="panel left-panel" ref="leftPanelRef">
           <div class="property-block">
             <h3 class="section-title">属性面板</h3>
@@ -106,7 +107,7 @@
         </section>
 
         <!-- 右侧实体面板（地图视图时隐藏，因为 MapView 组件有自己的实体列表） -->
-        <section class="panel right-panel" v-if="viewType !== 'map' && viewType !== 'historyMap'">
+        <section class="panel right-panel" v-if="isRightPanelVisible">
           <h3 class="section-title">实体列表</h3>
           <div class="entity-scroll">
             <div v-if="availableEntitiesPanel.length === 0" class="empty-tip">暂无实体</div>
@@ -303,6 +304,8 @@ const viewOptions = computed(() => {
   const category = store.selectedText?.category;
   return (category && viewPresets[category]) ? viewPresets[category] : viewPresets.default;
 });
+
+const isRightPanelVisible = computed(() => viewType.value !== "map" && viewType.value !== "historyMap");
 
 // 如果存储的视图不在当前列表中，回退到第一个
 watch(viewOptions, (opts) => {
@@ -605,6 +608,10 @@ const entityColor = (category) => {
   gap: 16px;
   min-height: 560px;
   align-items: stretch;
+}
+
+.graph-stage .graph-grid.no-right-panel {
+  grid-template-columns: 300px minmax(0, 1fr);
 }
 
 .panel {

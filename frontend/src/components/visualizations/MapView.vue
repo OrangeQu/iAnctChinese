@@ -1138,7 +1138,7 @@ onBeforeUnmount(() => {
 .map-wrapper { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 .map-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
 .section-title { margin: 0; font-size: 16px; font-weight: 600; }
-.map-content { display: flex; gap: 16px; height: 650px; }
+.map-content { display: flex; gap: 16px; height: 720px; }
 .entity-sidebar, .located-sidebar { width: 180px; background: #f9fafb; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
 .sidebar-header { padding: 10px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sidebar-title { font-weight: 600; font-size: 13px; }
