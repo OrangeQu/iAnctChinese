@@ -76,7 +76,7 @@
           </div>
           <el-divider />
           <div class="filter-panel-wrapper">
-            <FilterPanel :filters="store.filters" :show-relation-filters="viewType !== 'historyMap'"
+            <FilterPanel :filters="store.filters" :show-relation-filters="isRelationFilterVisible"
               :entity-options="store.entityOptions" :relation-options="store.relationOptions"
               @update:filters="handleFilterChange" />
           </div>
@@ -306,6 +306,7 @@ const viewOptions = computed(() => {
 });
 
 const isRightPanelVisible = computed(() => viewType.value !== "map" && viewType.value !== "historyMap");
+const isRelationFilterVisible = computed(() => viewType.value === "graph");
 
 // 如果存储的视图不在当前列表中，回退到第一个
 watch(viewOptions, (opts) => {
@@ -506,19 +507,17 @@ onBeforeUnmount(() => {
 
 // 将可用实体列表移到右侧面板
 const availableEntitiesPanel = computed(() => {
+  const entities = store.entities || [];
   if (viewType.value === "historyMap") {
-    return store.entities || [];
-  }
-  if (viewType.value === "graph") {
-    return store.entities || [];
+    return entities;
   }
   if (viewType.value === "map") {
     // 地图视图：优先地点实体，若无则展示全部，便于拖拽/确认
-    const locs = (store.entities || []).filter((e) => e.category === "LOCATION");
+    const locs = entities.filter((e) => e.category === "LOCATION");
     if (locs.length) return locs;
-    return store.entities || [];
+    return entities;
   }
-  return [];
+  return entities;
 });
 
 const isEntityMapped = (id) => {
