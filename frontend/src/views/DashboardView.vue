@@ -2,14 +2,8 @@
   <div class="dashboard-shell" v-loading="store.loading">
     <div class="stage-actions">
       <div class="user-menu">
-        <el-button
-          type="primary"
-          size="large"
-          style="padding: 12px 24px; font-size: 16px"
-          :loading="store.exporting"
-          :disabled="!store.selectedTextId"
-          @click="handleExport"
-        >
+        <el-button type="primary" size="large" style="padding: 12px 24px; font-size: 16px" :loading="store.exporting"
+          :disabled="!store.selectedTextId" @click="handleExport">
           导出
         </el-button>
       </div>
@@ -21,12 +15,8 @@
 
     <!-- 阶段导航 -->
     <div class="stage-nav">
-      <button
-        v-for="option in stageOptions"
-        :key="option.value"
-        :class="['stage-btn', { active: stage === option.value }]"
-        @click="stage = option.value"
-      >
+      <button v-for="option in stageOptions" :key="option.value"
+        :class="['stage-btn', { active: stage === option.value }]" @click="stage = option.value">
         <span class="icon">{{ option.icon }}</span>
         <span>{{ option.label }}</span>
       </button>
@@ -41,13 +31,9 @@
 
     <!-- 2. 统计分析阶段 -->
     <div v-else-if="stage === 'analysis'" class="analysis-stage" v-loading="isDataLoading">
-        <ClassificationBanner
-          :current-category="store.selectedText?.category || ''"
-          :classification="store.classification"
-          :loading="store.loading"
-          @classify="store.classifySelectedText"
-          @update-category="store.updateSelectedCategory"
-        />
+      <ClassificationBanner :current-category="store.selectedText?.category || ''"
+        :classification="store.classification" :loading="store.loading" @classify="store.classifySelectedText"
+        @update-category="store.updateSelectedCategory" />
       <div class="analysis-body">
         <aside class="panel insight-panel">
           <h3 class="section-title">实体列表</h3>
@@ -58,21 +44,16 @@
             </li>
           </ul>
         </aside>
-        <StatsPanel
-          class="analysis-panel"
-          :words="insights?.wordCloud || []"
-          :word-loading="store.wordCloudLoading"
-          :stats="insights?.stats || {}"
-          :analysis-summary="insights?.analysisSummary || ''"
-          @fetch-word-cloud="handleFetchWordCloud"
-        />
+        <StatsPanel class="analysis-panel" :words="insights?.wordCloud || []" :word-loading="store.wordCloudLoading"
+          :stats="insights?.stats || {}" :analysis-summary="insights?.analysisSummary || ''"
+          @fetch-word-cloud="handleFetchWordCloud" />
       </div>
     </div>
 
     <!-- 3. 知识图谱与可视化阶段 -->
     <div v-else class="graph-stage">
-      <div class="graph-grid" v-loading="isDataLoading">
-        <section class="panel left-panel">
+      <div class="graph-grid" v-loading="isDataLoading" ref="graphGridRef" :style="{ height: graphGridHeight + 'px' }">
+        <section class="panel left-panel" ref="leftPanelRef">
           <div class="property-block">
             <h3 class="section-title">属性面板</h3>
             <div class="property">
@@ -93,80 +74,70 @@
             </div>
           </div>
           <el-divider />
-          <FilterPanel
-            :filters="store.filters"
-            :show-relation-filters="viewType !== 'historyMap'"
-            :entity-options="store.entityOptions"
-            :relation-options="store.relationOptions"
-            @update:filters="handleFilterChange"
-          />
+          <FilterPanel :filters="store.filters" :show-relation-filters="viewType !== 'historyMap'"
+            :entity-options="store.entityOptions" :relation-options="store.relationOptions"
+            @update:filters="handleFilterChange" />
         </section>
-        
+
         <!-- 中间主要视图 -->
         <section class="panel view-panel">
-      <div class="view-toggle">
-        <el-radio-group v-model="viewType">
-          <el-radio-button
-            v-for="option in viewOptions"
-            :key="option.value"
-                :label="option.value"
-              >
+          <div class="view-toggle">
+            <el-radio-group v-model="viewType">
+              <el-radio-button v-for="option in viewOptions" :key="option.value" :label="option.value">
                 {{ option.label }}
               </el-radio-button>
             </el-radio-group>
-            
+
             <div class="recommended" v-if="insights?.recommendedViews?.length">
               <span>推荐视图：</span>
               <el-tag v-for="view in insights.recommendedViews" :key="view" size="small">
                 {{ view }}
               </el-tag>
             </div>
-        </div>
-        <div class="category-override">
-          <el-select v-model="categoryDraft" placeholder="选择文言文类型" style="width: 220px">
-            <el-option label="战争纪实" value="warfare" />
-            <el-option label="游记地理" value="travelogue" />
-            <el-option label="人物传记" value="biography" />
-            <el-option label="官职体系" value="official" />
-            <el-option label="农书类" value="agriculture" />
-            <el-option label="工艺技术" value="crafts" />
-            <el-option label="其他" value="other" />
-            <el-option label="待识别" value="unknown" />
-          </el-select>
-          <el-button type="primary" size="small" @click="handleSaveCategory">保存类型</el-button>
-        </div>
+          </div>
 
-        <!-- 动态组件渲染 -->
-        <component 
-          :is="currentComponent" 
-          v-bind="viewProps" 
-            :key="store.selectedTextId + '-' + viewType"
-            ref="viewComponentRef"
-          />
+          <div class="category-override">
+            <el-select v-model="categoryDraft" placeholder="选择文言文类型" style="width: 220px">
+              <el-option label="战争纪实" value="warfare" />
+              <el-option label="游记地理" value="travelogue" />
+              <el-option label="人物传记" value="biography" />
+              <el-option label="官职体系" value="official" />
+              <el-option label="农书类" value="agriculture" />
+              <el-option label="工艺技术" value="crafts" />
+              <el-option label="其他" value="other" />
+              <el-option label="待识别" value="unknown" />
+            </el-select>
+            <el-button type="primary" size="small" @click="handleSaveCategory">保存类型</el-button>
+          </div>
+
+          <div class="view-panel-body">
+            <!-- 动态组件渲染 -->
+            <component :is="currentComponent" v-bind="viewProps" :key="store.selectedTextId + '-' + viewType"
+              ref="viewComponentRef" />
+          </div>
         </section>
 
         <!-- 右侧实体面板（地图视图时隐藏，因为 MapView 组件有自己的实体列表） -->
         <section class="panel right-panel" v-if="viewType !== 'map' && viewType !== 'historyMap'">
           <h3 class="section-title">实体列表</h3>
-          <div v-if="availableEntitiesPanel.length === 0" class="empty-tip">暂无实体</div>
-          <div
-            v-for="entity in availableEntitiesPanel"
-            :key="entity.id"
-            class="entity-item"
-            :class="{ disabled: isEntityMapped(entity.id) }"
-            :draggable="!isEntityMapped(entity.id)"
-            @dragstart="(evt) => startEntityDrag(evt, entity)"
-          >
-            <div class="entity-meta">
-              <span class="dot" :style="{ background: entityColor(entity.category) }"></span>
-              <span class="name">{{ entity.label || entity.name }}</span>
-            </div>
-            <span v-if="isEntityMapped(entity.id)" class="status-tag">已标注</span>
+          <div class="entity-scroll">
+            <div v-if="availableEntitiesPanel.length === 0" class="empty-tip">暂无实体</div>
+            <template v-else>
+              <div v-for="entity in availableEntitiesPanel" :key="entity.id" class="entity-item"
+                :class="{ disabled: isEntityMapped(entity.id) }" :draggable="!isEntityMapped(entity.id)"
+                @dragstart="(evt) => startEntityDrag(evt, entity)">
+                <div class="entity-meta">
+                  <span class="dot" :style="{ background: entityColor(entity.category) }"></span>
+                  <span class="name">{{ entity.label || entity.name }}</span>
+                </div>
+                <span v-if="isEntityMapped(entity.id)" class="status-tag">已标注</span>
+              </div>
+            </template>
           </div>
         </section>
       </div>
     </div>
-    
+
     <!-- 搜索弹窗 -->
     <el-dialog v-model="searchDialogVisible" title="搜索结果" width="520px">
       <el-table :data="store.searchResults" v-loading="store.searchLoading" size="small">
@@ -182,7 +153,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch, nextTick } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
@@ -215,9 +186,13 @@ const STORAGE_VIEW_PER_TEXT_KEY = "dashboard-view-per-text";
 
 const stage = ref(localStorage.getItem(STORAGE_STAGE_KEY) || "structure");
 const viewType = ref(localStorage.getItem(STORAGE_VIEW_KEY) || "graph");
-const categoryDraft = ref("");
+const categoryDraft = ref(store.selectedText?.category || "other");
 const searchDialogVisible = ref(false);
 const viewComponentRef = ref(null);
+const graphGridRef = ref(null);
+const leftPanelRef = ref(null);
+const graphGridHeight = ref(560);
+let leftPanelObserver = null;
 
 const handleLogout = () => {
   authStore.logout();
@@ -462,11 +437,57 @@ const selectFromSearch = async (textId) => {
 
 const translateEntity = (cat) => cat === "PERSON" ? "人物" : cat;
 
+const updateGraphGridHeight = () => {
+  if (stage.value !== "graph") return;
+  if (typeof window === "undefined") return;
+  const gridEl = graphGridRef.value;
+  if (!gridEl) return;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const { top } = gridEl.getBoundingClientRect();
+  const bottomGap = 24;
+  const availableHeight = viewportHeight - top - bottomGap;
+  let targetHeight = Math.max(availableHeight, 520);
+  if (leftPanelRef.value) {
+    const { height: leftHeight } = leftPanelRef.value.getBoundingClientRect();
+    targetHeight = Math.max(targetHeight, leftHeight);
+  }
+  graphGridHeight.value = targetHeight;
+};
+
+const scheduleGraphGridResize = () => {
+  if (stage.value !== "graph") return;
+  nextTick(() => updateGraphGridHeight());
+};
+
+const handleWindowResize = () => {
+  scheduleGraphGridResize();
+};
+
+const setupLeftPanelObserver = () => {
+  if (typeof window === "undefined" || !("ResizeObserver" in window)) return;
+  if (leftPanelObserver) {
+    leftPanelObserver.disconnect();
+    leftPanelObserver = null;
+  }
+  if (!leftPanelRef.value) return;
+  leftPanelObserver = new window.ResizeObserver(() => scheduleGraphGridResize());
+  leftPanelObserver.observe(leftPanelRef.value);
+};
+
+watch(
+  () => leftPanelRef.value,
+  () => {
+    setupLeftPanelObserver();
+    scheduleGraphGridResize();
+  }
+);
+
 // 刷新后保持在当前阶段/视图
 watch(stage, (val) => {
   localStorage.setItem(STORAGE_STAGE_KEY, val);
   if (val === "graph") {
     ensureFullInsights();
+    scheduleGraphGridResize();
   }
 }, { immediate: true });
 watch(viewType, (val) => {
@@ -477,11 +498,38 @@ watch(viewType, (val) => {
     localStorage.setItem(STORAGE_VIEW_PER_TEXT_KEY, JSON.stringify(perTextViews));
   }
   ensureFullInsights();
+  scheduleGraphGridResize();
 });
 
 watch(() => store.selectedTextId, () => {
   if (stage.value === "graph") {
     ensureFullInsights();
+    scheduleGraphGridResize();
+  }
+});
+
+watch(() => store.entities.length, () => {
+  scheduleGraphGridResize();
+});
+
+watch(() => store.relations.length, () => {
+  scheduleGraphGridResize();
+});
+
+onMounted(() => {
+  scheduleGraphGridResize();
+  if (typeof window !== "undefined") {
+    window.addEventListener("resize", handleWindowResize);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("resize", handleWindowResize);
+  }
+  if (leftPanelObserver) {
+    leftPanelObserver.disconnect();
+    leftPanelObserver = null;
   }
 });
 
@@ -520,37 +568,255 @@ const entityColor = (category) => {
 </script>
 
 <style scoped>
-.dashboard-shell { display: flex; flex-direction: column; gap: 8px; }
-.stage-actions { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 4px; }
-.return-bar { margin: 6px 0 8px; }
-.user-menu { display: flex; align-items: center; gap: 10px; }
-.icon-circle { background: #f3f4f6; color: #111827; border-color: #e5e7eb; }
-.icon-circle:hover { background: #e5e7eb; color: #0f172a; }
-.stage-nav { display: flex; gap: 12px; margin-bottom: 4px; }
-.stage-btn { padding: 8px 18px; border-radius: 999px; border: 1px solid var(--border); background: white; cursor: pointer; display: flex; gap: 6px; align-items: center;}
-.stage-btn.active { background: #3f3d56; color: white; }
-.graph-stage .graph-grid { display: grid; grid-template-columns: 300px 1fr 300px; gap: 16px; min-height: 560px; }
-.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
-.view-panel { min-height: 520px; }
-.left-panel { display: flex; flex-direction: column; gap: 14px; padding: 0; border: none; background: transparent; box-shadow: none; }
-.property-block { background: linear-gradient(180deg, #fffaf1 0%, #fff 80%); border: 1px solid #eadfce; border-radius: 16px; padding: 14px 16px; box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08); }
-.left-panel :deep(.filter-panel) { border: 1px solid #eadfce; background: linear-gradient(180deg, #fffaf1 0%, #fff 80%); box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08); }
-.view-toggle { display: flex; justify-content: space-between; margin-bottom: 12px; }
-.category-override { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-.analysis-stage .analysis-body { display: grid; grid-template-columns: 260px 1fr; gap: 16px; }
-.chip-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.chip-list li { display: flex; justify-content: space-between; background: rgba(247,244,236,0.9); padding: 6px 12px; border-radius: 999px; font-size: 13px; }
-.right-panel { display: flex; flex-direction: column; gap: 12px; }
-.property { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
-.property span { color: var(--muted); }
-.stats-block { margin-top: 4px; }
-.sub-title { margin: 0 0 8px; font-size: 14px; color: #8c7a6b; }
-.stat-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; color: #4a443e; }
-.entity-panel { display: flex; flex-direction: column; gap: 8px; }
-.entity-item { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; cursor: grab; }
-.entity-item.disabled { background: #f5f5f5; color: #999; cursor: not-allowed; }
-.entity-meta { display: flex; align-items: center; gap: 8px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; }
-.empty-tip { color: var(--muted); }
-.status-tag { font-size: 12px; color: #67c23a; background: #e1f3d8; padding: 2px 6px; border-radius: 6px; }
+.dashboard-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+}
+
+.stage-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.return-bar {
+  margin: 6px 0 8px;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-circle {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #e5e7eb;
+}
+
+.icon-circle:hover {
+  background: #e5e7eb;
+  color: #0f172a;
+}
+
+.stage-nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.stage-btn {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: white;
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.stage-btn.active {
+  background: #3f3d56;
+  color: white;
+}
+
+.graph-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.graph-stage .graph-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  gap: 16px;
+  min-height: 560px;
+  align-items: stretch;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.graph-stage .panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.view-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.left-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.property-block {
+  background: linear-gradient(180deg, #fffaf1 0%, #fff 80%);
+  border: 1px solid #eadfce;
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08);
+}
+
+.left-panel :deep(.filter-panel) {
+  border: 1px solid #eadfce;
+  background: linear-gradient(180deg, #fffaf1 0%, #fff 80%);
+  box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08);
+}
+
+.view-toggle {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.category-override {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.analysis-stage .analysis-body {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+}
+
+.chip-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chip-list li {
+  display: flex;
+  justify-content: space-between;
+  background: rgba(247, 244, 236, 0.9);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.entity-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.property {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.property span {
+  color: var(--muted);
+}
+
+.stats-block {
+  margin-top: 4px;
+}
+
+.sub-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #8c7a6b;
+}
+
+.stat-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #4a443e;
+}
+
+.entity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entity-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  cursor: grab;
+}
+
+.entity-item.disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.entity-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.empty-tip {
+  color: var(--muted);
+}
+
+.status-tag {
+  font-size: 12px;
+  color: #67c23a;
+  background: #e1f3d8;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
 </style>
