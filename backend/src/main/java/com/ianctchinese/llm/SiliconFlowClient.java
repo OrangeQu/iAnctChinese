@@ -59,11 +59,11 @@ public class SiliconFlowClient {
         warfare（战争纪实）、travelogue（游记地理）、biography（人物传记）、
         official（官职体系）、agriculture（农书类）、crafts（工艺技术）、other（其他/无法归类）。
         如果不确定，也必须在上述类别中选最可能的一个，不要输出 unknown。
-        输出需包含类别、置信度和2条中文理由说明。
+        输出仅包含类别和置信度。
         """;
     String userPrompt = """
         仅输出 JSON（不要多余文字）：
-        {"category":"warfare|travelogue|biography|official|agriculture|crafts|other","confidence":0-1,"reasons":["理由1","理由2"]}
+        {"category":"warfare|travelogue|biography|official|agriculture|crafts|other","confidence":0-1}
         文本：
         %s
         """.formatted(textContent);
