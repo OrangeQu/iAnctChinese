@@ -74,9 +74,11 @@
             </div>
           </div>
           <el-divider />
-          <FilterPanel :filters="store.filters" :show-relation-filters="viewType !== 'historyMap'"
-            :entity-options="store.entityOptions" :relation-options="store.relationOptions"
-            @update:filters="handleFilterChange" />
+          <div class="filter-panel-wrapper">
+            <FilterPanel :filters="store.filters" :show-relation-filters="viewType !== 'historyMap'"
+              :entity-options="store.entityOptions" :relation-options="store.relationOptions"
+              @update:filters="handleFilterChange" />
+          </div>
         </section>
 
         <!-- 中间主要视图 -->
@@ -94,20 +96,6 @@
                 {{ view }}
               </el-tag>
             </div>
-          </div>
-
-          <div class="category-override">
-            <el-select v-model="categoryDraft" placeholder="选择文言文类型" style="width: 220px">
-              <el-option label="战争纪实" value="warfare" />
-              <el-option label="游记地理" value="travelogue" />
-              <el-option label="人物传记" value="biography" />
-              <el-option label="官职体系" value="official" />
-              <el-option label="农书类" value="agriculture" />
-              <el-option label="工艺技术" value="crafts" />
-              <el-option label="其他" value="other" />
-              <el-option label="待识别" value="unknown" />
-            </el-select>
-            <el-button type="primary" size="small" @click="handleSaveCategory">保存类型</el-button>
           </div>
 
           <div class="view-panel-body">
@@ -170,7 +158,6 @@ import ClassificationBanner from "@/components/layout/ClassificationBanner.vue";
 import FamilyTreeView from "@/components/visualizations/FamilyTreeView.vue";
 import BattleTimelineView from "@/components/visualizations/BattleTimelineView.vue";
 import TextWorkspace from "./TextWorkspace.vue";
-import WordCloudCanvas from "@/components/visualizations/WordCloudCanvas.vue";
 import HistoryMap from "@/components/visualizations/MapView.vue";
 import OfficialTreeView from "@/components/visualizations/OfficialTreeView.vue";
 import ProcessCycleView from "@/components/visualizations/ProcessCycleView.vue";
@@ -186,12 +173,11 @@ const STORAGE_VIEW_PER_TEXT_KEY = "dashboard-view-per-text";
 
 const stage = ref(localStorage.getItem(STORAGE_STAGE_KEY) || "structure");
 const viewType = ref(localStorage.getItem(STORAGE_VIEW_KEY) || "graph");
-const categoryDraft = ref(store.selectedText?.category || "other");
 const searchDialogVisible = ref(false);
 const viewComponentRef = ref(null);
 const graphGridRef = ref(null);
 const leftPanelRef = ref(null);
-const graphGridHeight = ref(560);
+const graphGridHeight = ref(520);
 let leftPanelObserver = null;
 
 const handleLogout = () => {
@@ -264,8 +250,6 @@ watch(() => route.params.id, async (id) => {
 // 选中文本后，确保当前视图合法且不抢占已有选择
 watch(() => store.selectedText?.id, async (newId) => {
   if (newId) {
-    // 初始化草稿类别为当前文献类别
-    categoryDraft.value = store.selectedText?.category || "other";
     await nextTick();
     const opts = viewOptions.value;
     const perTextViews = JSON.parse(localStorage.getItem(STORAGE_VIEW_PER_TEXT_KEY) || "{}");
@@ -302,13 +286,11 @@ const viewPresets = {
   ],
   agriculture: [
     { value: "processCycle", label: "农事流程" },
-    { value: "graph", label: "知识图谱" },
-    { value: "cloud", label: "词云" }
+    { value: "graph", label: "知识图谱" }
   ],
   crafts: [
     { value: "processCycle", label: "工艺流程" },
-    { value: "graph", label: "知识图谱" },
-    { value: "cloud", label: "词云" }
+    { value: "graph", label: "知识图谱" }
   ],
   default: [
     { value: "graph", label: "知识图谱" },
@@ -337,7 +319,6 @@ const componentMap = {
   historyMap: HistoryMap,
   family: FamilyTreeView,
   battle: BattleTimelineView,
-  cloud: WordCloudCanvas,
   officialTree: OfficialTreeView,
   processCycle: ProcessCycleView
 };
@@ -360,7 +341,6 @@ const viewProps = computed(() => {
         points: insights.value?.mapPoints || [],
         allEntities: store.entities || []
       };
-    case "cloud": return { words: insights.value?.wordCloud || [] };
     case "timeline": return {
       milestones: insights.value?.timeline || [],
       category: store.selectedText?.category || 'unknown',
@@ -418,18 +398,6 @@ const handleFilterChange = (filters) => {
   store.setHighlightOnly(filters.highlightOnly);
 };
 
-const handleSaveCategory = async () => {
-  if (!categoryDraft.value) return;
-  if (!store.selectedTextId) return;
-  await store.updateSelectedCategory(categoryDraft.value);
-  ElMessage.success("文言文类型已更新");
-  // 类型变更后，重置视图到该类型的第一个预设视图
-  const opts = viewOptions.value;
-  if (opts.length) {
-    viewType.value = opts[0].value;
-  }
-};
-
 const selectFromSearch = async (textId) => {
   searchDialogVisible.value = false;
   await store.selectText(textId);
@@ -446,7 +414,7 @@ const updateGraphGridHeight = () => {
   const { top } = gridEl.getBoundingClientRect();
   const bottomGap = 24;
   const availableHeight = viewportHeight - top - bottomGap;
-  let targetHeight = Math.max(availableHeight, 520);
+  let targetHeight = Math.max(availableHeight, 1000);
   if (leftPanelRef.value) {
     const { height: leftHeight } = leftPanelRef.value.getBoundingClientRect();
     targetHeight = Math.max(targetHeight, leftHeight);
@@ -688,17 +656,20 @@ const entityColor = (category) => {
   box-shadow: 0 8px 22px rgba(90, 67, 40, 0.08);
 }
 
+.filter-panel-wrapper {
+  flex: 1;
+  display: flex;
+}
+
+.filter-panel-wrapper :deep(.filter-panel) {
+  flex: 1;
+  width: 100%;
+}
+
 .view-toggle {
   display: flex;
   justify-content: space-between;
   margin-bottom: 12px;
-}
-
-.category-override {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 8px 0;
 }
 
 .analysis-stage .analysis-body {
