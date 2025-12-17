@@ -93,6 +93,7 @@ public class SiliconFlowClient {
 
     String systemPrompt = """
         You are a classical-Chinese IE assistant. Extract entities and relations.
+        You MUST output strict JSON (no extra text). Offsets are zero-based index within the original text.
         Entities: PERSON, LOCATION, EVENT, ORGANIZATION, OBJECT, CUSTOM.
         Relations: FAMILY, ALLY, SUPPORT, RIVAL, CONFLICT, MENTOR, INFLUENCE, LOCATION_OF, PART_OF, CAUSE, TEMPORAL, TRAVEL, CUSTOM.
         """;
@@ -100,9 +101,7 @@ public class SiliconFlowClient {
         Output JSON:
         {
           "entities":[{"label":"","category":"PERSON|LOCATION|EVENT|ORGANIZATION|OBJECT|CUSTOM","startOffset":0,"endOffset":0,"confidence":0.8}],
-          "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|SUPPORT|RIVAL|CONFLICT|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|TEMPORAL|TRAVEL|CUSTOM","confidence":0.7,"description":""}],
-          "sentences":[{"original":"","punctuated":"","summary":""}],
-          "wordCloud":[{"label":"","weight":0.8}]
+          "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|SUPPORT|RIVAL|CONFLICT|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|TEMPORAL|TRAVEL|CUSTOM","confidence":0.7,"description":""}]
         }
         Text:
         %s
@@ -165,6 +164,36 @@ public class SiliconFlowClient {
     } catch (Exception ex) {
       log.warn("SiliconFlow annotateText error: {}", ex.getMessage());
       return AnnotationPayload.builder().build();
+    }
+  }
+
+  public List<SentenceSuggestion> analyzeSentencesOnly(String textContent, String modelName) {
+    String limitedContent = textContent == null ? "" : textContent;
+    String systemPrompt = """
+        你是文言文断句助手。请将文本切分成若干句段，并给出断句后的文本（带标点），不需要简短摘要。
+        必须输出严格 JSON，格式：{"sentences":[{"original":"","punctuated":""}]}
+        """;
+    String userPrompt = """
+        文本：
+        %s
+        """.formatted(limitedContent);
+    try {
+      JsonNode node = sendAndParse(systemPrompt, userPrompt, modelName);
+      if (node == null || !node.has("sentences")) {
+        return List.of();
+      }
+      List<SentenceSuggestion> sentences = new ArrayList<>();
+      node.get("sentences").forEach(item -> sentences.add(
+          SentenceSuggestion.builder()
+              .original(item.path("original").asText())
+              .punctuated(item.path("punctuated").asText())
+              .summary("")
+              .build()
+      ));
+      return sentences;
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeSentencesOnly error: {}", ex.getMessage());
+      return List.of();
     }
   }
 

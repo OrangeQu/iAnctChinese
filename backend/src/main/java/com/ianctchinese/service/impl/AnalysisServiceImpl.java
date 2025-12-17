@@ -276,15 +276,17 @@ public class AnalysisServiceImpl implements AnalysisService {
   @Transactional
   public AutoAnnotationResponse analyzeSentences(Long textId, String model) {
     TextDocument document = loadText(textId);
-    AnnotationPayload payload = siliconFlowClient.annotateText(document.getContent(), model);
-    if (!payload.getSentences().isEmpty()) {
-      // 句读分析将通过专门的接口触发，此处不覆盖
+    List<SentenceSuggestion> suggestions = siliconFlowClient.analyzeSentencesOnly(document.getContent(), model);
+    if (!suggestions.isEmpty()) {
+      textSectionService.replaceSections(textId, toSegmentRequests(textId, suggestions));
+    } else {
+      textSectionService.autoSegment(textId);
     }
     return AutoAnnotationResponse.builder()
         .textId(textId)
         .createdEntities(0)
         .createdRelations(0)
-        .message(payload.getSentences().isEmpty() ? "模型未返回句读，已回退为自动分句" : "句读分析完成")
+        .message(suggestions.isEmpty() ? "模型未返回句读，已回退为自动分句" : "句读分析完成")
         .build();
   }
 

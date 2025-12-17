@@ -1038,6 +1038,20 @@ const handleClassify = async () => {
   }
 };
 
+const handleSegmentAnalysis = async () => {
+  segmenting.value = true;
+  try {
+    await handleContentSave(true);
+    await store.runSentenceSegmentation(selectedModel.value);
+    ElMessage.success("句读分析完成");
+  } catch (error) {
+    console.error("segment analysis failed", error);
+    ElMessage.error("句读分析失败，请稍后重试");
+  } finally {
+    segmenting.value = false;
+  }
+};
+
 const translateCategory = (category) => {
   const map = {
     warfare: "战争纪实",
@@ -1473,16 +1487,3 @@ onMounted(() => {
   gap: 8px;
 }
 </style>
-const handleSegmentAnalysis = async () => {
-  segmenting.value = true;
-  try {
-    await handleContentSave(true);
-    await store.runSentenceSegmentation(selectedModel.value);
-    ElMessage.success("句读分析完成");
-  } catch (error) {
-    console.error("segment analysis failed", error);
-    ElMessage.error("句读分析失败，请稍后重试");
-  } finally {
-    segmenting.value = false;
-  }
-};
