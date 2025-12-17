@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { fetchTexts, fetchTextById, uploadText, updateTextCategory, exportText, deleteText as deleteTextApi, updateText as updateTextApi } from "@/api/texts";
 import { fetchEntities, fetchRelations, createEntity, createRelation, deleteEntity as deleteEntityApi, deleteRelation as deleteRelationApi } from "@/api/annotations";
-import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi, extractRelations, segmentText } from "@/api/analysis";
+import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi, extractRelations, segmentText, fetchWordCloud } from "@/api/analysis";
 import { fetchSections, updateSection as updateSectionApi } from "@/api/sections";
 import { fetchNavigationTree } from "@/api/navigation";
 import { searchTexts } from "@/api/search";
@@ -27,6 +27,7 @@ export const useTextStore = defineStore("textStore", {
     exporting: false,
     loading: false,
     saving: false,
+    wordCloudLoading: false,
     analysisRunning: false,
     classifyRunning: false,
     filters: {
@@ -302,6 +303,23 @@ export const useTextStore = defineStore("textStore", {
         await this.loadNavigationTree();
       } finally {
         this.analysisRunning = false;
+      }
+    },
+    async loadWordCloud(model) {
+      if (!this.selectedTextId) {
+        return;
+      }
+      this.wordCloudLoading = true;
+      try {
+        const { data } = await fetchWordCloud(this.selectedTextId, model);
+        const wordCloud = Array.isArray(data) ? data : [];
+        if (!this.insights) {
+          this.insights = { wordCloud };
+        } else {
+          this.insights = { ...this.insights, wordCloud };
+        }
+      } finally {
+        this.wordCloudLoading = false;
       }
     },
     async updateSelectedCategory(category) {

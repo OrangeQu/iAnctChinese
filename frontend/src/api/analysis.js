@@ -16,6 +16,12 @@ export const fetchInsights = (textId, params = {}) => {
   return apiClient.get(`/analysis/${textId}/insights`, { params });
 };
 
+export const fetchWordCloud = (textId, model) => {
+  return apiClient.get(`/analysis/${textId}/word-cloud`, {
+    params: model ? { model } : {}
+  });
+};
+
 export const runFullAnalysis = (textId, model) => {
   return apiClient.post(`/analysis/${textId}/full`, null, {
     params: model ? { model } : {}

@@ -62,8 +62,10 @@
         <StatsPanel
           class="analysis-panel"
           :words="insights?.wordCloud || []"
+          :word-loading="store.wordCloudLoading"
           :stats="insights?.stats || {}"
           :analysis-summary="insights?.analysisSummary || ''"
+          @fetch-word-cloud="handleFetchWordCloud"
         />
       </div>
     </div>
@@ -225,6 +227,16 @@ const handleLogout = () => {
 
 const handleExport = () => {
   store.exportSelectedText();
+};
+
+const handleFetchWordCloud = async () => {
+  try {
+    await store.loadWordCloud();
+    ElMessage.success("词云已生成");
+  } catch (error) {
+    console.error("fetch word cloud failed", error);
+    ElMessage.error("词云生成失败，请稍后重试");
+  }
 };
 
 const goProfile = () => {

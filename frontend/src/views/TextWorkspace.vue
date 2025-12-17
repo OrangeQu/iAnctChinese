@@ -240,6 +240,7 @@ const store = useTextStore();
 const authStore = useAuthStore();
 
 const llmModels = [
+  { id: "deepseek-ai/DeepSeek-V3.2", label: "DeepSeek-V3.2", isThinking: false },
   { id: "deepseek-ai/DeepSeek-V3.2-Exp", label: "deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
   { id: "Pro/deepseek-ai/DeepSeek-V3.2-Exp", label: "Pro/deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
   { id: "inclusionAI/Ling-1T", label: "inclusionAI/Ling-1T", isThinking: false },

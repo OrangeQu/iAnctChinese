@@ -122,11 +122,6 @@ public class AnalysisServiceImpl implements AnalysisService {
     // ============ 并行构建各种可视化图谱 ============
     // 这些图谱构建互不依赖，可以并行执行以加快速度
     // 使用自定义线程池，设置30秒超时
-    CompletableFuture<List<WordCloudItem>> wordCloudFuture = CompletableFuture.supplyAsync(() -> {
-      log.info("并行构建：词云");
-      return buildWordCloud(entities, content);
-    }, analysisTaskExecutor);
-
     CompletableFuture<List<TimelineEvent>> timelineFuture = CompletableFuture.supplyAsync(() -> {
       log.info("并行构建：时间轴");
       return buildTimelineFromEntities(text, entities, relations);
@@ -162,7 +157,6 @@ public class AnalysisServiceImpl implements AnalysisService {
     }, analysisTaskExecutor);
 
     // 等待所有并行任务完成（设置30秒超时）
-    List<WordCloudItem> wordCloud;
     List<TimelineEvent> timeline;
     List<MapPathPoint> mapPoints;
     List<BattleEvent> battleTimeline;
@@ -172,7 +166,6 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     try {
       log.info("等待所有可视化图谱构建完成...");
-      wordCloud = wordCloudFuture.get(30, TimeUnit.SECONDS);
       timeline = timelineFuture.get(30, TimeUnit.SECONDS);
       mapPoints = mapPointsFuture.get(30, TimeUnit.SECONDS);
       battleTimeline = battleTimelineFuture.get(30, TimeUnit.SECONDS);
@@ -183,7 +176,6 @@ public class AnalysisServiceImpl implements AnalysisService {
     } catch (TimeoutException e) {
       log.error("构建洞察时超时，使用部分结果", e);
       // 超时时使用已完成的结果，未完成的使用空列表
-      wordCloud = wordCloudFuture.isDone() ? wordCloudFuture.join() : Collections.emptyList();
       timeline = timelineFuture.isDone() ? timelineFuture.join() : Collections.emptyList();
       mapPoints = mapPointsFuture.isDone() ? mapPointsFuture.join() : Collections.emptyList();
       battleTimeline = battleTimelineFuture.isDone() ? battleTimelineFuture.join() : Collections.emptyList();
@@ -201,7 +193,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         .textId(textId)
         .category(category)
         .stats(stats)
-        .wordCloud(wordCloud)
+        .wordCloud(Collections.emptyList())
         .timeline(timeline)
         .mapPoints(mapPoints)
         .battleTimeline(battleTimeline)
@@ -219,33 +211,21 @@ public class AnalysisServiceImpl implements AnalysisService {
   public AutoAnnotationResponse autoAnnotate(Long textId, String model) {
     TextDocument document = loadText(textId);
     AnnotationPayload payload = siliconFlowClient.annotateText(document.getContent(), model);
+    if (payload == null || payload.getEntities() == null || payload.getEntities().isEmpty()) {
+      throw new IllegalStateException("大模型未返回可用的实体结果，请更换模型或稍后再试");
+    }
+
     relationAnnotationRepository.deleteByTextDocumentId(textId);
     entityAnnotationRepository.deleteByTextDocumentId(textId);
 
-    List<AnnotationEntity> fallbackEntities = buildHeuristicEntities(document.getContent());
-    List<AnnotationEntity> payloadEntities = payload.getEntities().isEmpty()
-        ? fallbackEntities
-        : payload.getEntities();
-
-    List<AnnotationEntity> payloadRelationsSource = payloadEntities.isEmpty()
-        ? fallbackEntities
-        : payloadEntities;
-
-    List<AnnotationRelation> payloadRelations = payload.getRelations().isEmpty()
-        ? buildHeuristicRelations(payloadRelationsSource)
-        : payload.getRelations();
-
+    List<AnnotationEntity> payloadEntities = payload.getEntities();
     List<EntityAnnotation> entities = saveEntities(document, payloadEntities);
-    List<RelationAnnotation> relations = saveRelations(document, payloadRelations, entities);
-    if (relations.isEmpty()) {
-      relations = saveHeuristicRelations(document, entities);
-    }
 
     return AutoAnnotationResponse.builder()
         .textId(textId)
         .createdEntities(entities.size())
-        .createdRelations(relations.size())
-        .message("模型已生成实体与关系，可在前端继续校对。")
+        .createdRelations(0)
+        .message("模型已生成实体，可手动补充后点击“提取关系”构建关系。")
         .build();
   }
 
@@ -288,6 +268,13 @@ public class AnalysisServiceImpl implements AnalysisService {
         .createdRelations(0)
         .message(suggestions.isEmpty() ? "模型未返回句读，已回退为自动分句" : "句读分析完成")
         .build();
+  }
+
+  @Override
+  public List<WordCloudItem> analyzeWordCloud(Long textId, String model) {
+    TextDocument document = loadText(textId);
+    List<EntityAnnotation> entities = entityAnnotationRepository.findByTextDocumentId(textId);
+    return buildWordCloud(entities, document.getContent(), model);
   }
 
   @Override
@@ -684,7 +671,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     return (double) completed / sections.size();
   }
 
-  private List<WordCloudItem> buildWordCloud(List<EntityAnnotation> entities, String content) {
+  private List<WordCloudItem> buildWordCloud(List<EntityAnnotation> entities, String content, String modelName) {
     // 使用LLM生成词云（强制调用API）
     String entityList = entities.stream()
         .limit(20)
@@ -692,7 +679,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         .collect(Collectors.joining("、"));
 
     try {
-      JsonNode result = siliconFlowClient.analyzeWordCloud(content, entityList, null);
+      JsonNode result = siliconFlowClient.analyzeWordCloud(content, entityList, modelName);
       if (result != null && result.has("wordCloud") && result.get("wordCloud").isArray()) {
         List<WordCloudItem> items = new ArrayList<>();
         result.get("wordCloud").forEach(item -> {

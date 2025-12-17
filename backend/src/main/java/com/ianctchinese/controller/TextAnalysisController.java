@@ -56,4 +56,10 @@ public class TextAnalysisController {
       @RequestParam(value = "light", defaultValue = "true") boolean light) {
     return ResponseEntity.ok(analysisService.buildInsights(textId, light));
   }
+
+  @GetMapping("/{textId}/word-cloud")
+  public ResponseEntity<?> wordCloud(@PathVariable("textId") Long textId,
+      @RequestParam(value = "model", required = false) String model) {
+    return ResponseEntity.ok(analysisService.analyzeWordCloud(textId, model));
+  }
 }

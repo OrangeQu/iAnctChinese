@@ -4,6 +4,8 @@ import com.ianctchinese.dto.AutoAnnotationResponse;
 import com.ianctchinese.dto.ClassificationResponse;
 import com.ianctchinese.dto.ModelAnalysisResponse;
 import com.ianctchinese.dto.TextInsightsResponse;
+import com.ianctchinese.dto.TextInsightsResponse.WordCloudItem;
+import java.util.List;
 
 public interface AnalysisService {
 
@@ -22,4 +24,6 @@ public interface AnalysisService {
   AutoAnnotationResponse analyzeSentences(Long textId, String model);
 
   ModelAnalysisResponse runFullAnalysis(Long textId, String model);
+
+  List<WordCloudItem> analyzeWordCloud(Long textId, String model);
 }

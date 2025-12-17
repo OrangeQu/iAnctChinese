@@ -47,7 +47,7 @@ public class SiliconFlowClient {
     if (restTemplate == null) {
       restTemplate = restTemplateBuilder
           .setConnectTimeout(Duration.ofSeconds(15))
-          .setReadTimeout(Duration.ofSeconds(60))
+          .setReadTimeout(Duration.ofSeconds(120))
           .build();
     }
     return restTemplate;
@@ -92,16 +92,14 @@ public class SiliconFlowClient {
     String limitedContent = textContent == null ? "" : textContent;
 
     String systemPrompt = """
-        You are a classical-Chinese IE assistant. Extract entities and relations.
+        You are a classical-Chinese IE assistant. Extract entities only.
         You MUST output strict JSON (no extra text). Offsets are zero-based index within the original text.
         Entities: PERSON, LOCATION, EVENT, ORGANIZATION, OBJECT, CUSTOM.
-        Relations: FAMILY, ALLY, SUPPORT, RIVAL, CONFLICT, MENTOR, INFLUENCE, LOCATION_OF, PART_OF, CAUSE, TEMPORAL, TRAVEL, CUSTOM.
         """;
     String userPrompt = """
         Output JSON:
         {
-          "entities":[{"label":"","category":"PERSON|LOCATION|EVENT|ORGANIZATION|OBJECT|CUSTOM","startOffset":0,"endOffset":0,"confidence":0.8}],
-          "relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|SUPPORT|RIVAL|CONFLICT|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|TEMPORAL|TRAVEL|CUSTOM","confidence":0.7,"description":""}]
+          "entities":[{"label":"","category":"PERSON|LOCATION|EVENT|ORGANIZATION|OBJECT|CUSTOM","startOffset":0,"endOffset":0,"confidence":0.8}]
         }
         Text:
         %s

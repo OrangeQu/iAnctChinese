@@ -1,6 +1,11 @@
 <template>
   <section class="panel stats-panel">
-    <h3 class="section-title">词频词云</h3>
+    <div class="section-header">
+      <h3 class="section-title">词频词云</h3>
+      <el-button size="small" type="primary" plain :loading="wordLoading" @click="$emit('fetch-word-cloud')">
+        生成词云
+      </el-button>
+    </div>
     <WordCloudCanvas :words="words" />
     <el-divider />
     <h3 class="section-title">统计信息</h3>
@@ -16,10 +21,16 @@
 <script setup>
 import WordCloudCanvas from "./WordCloudCanvas.vue";
 
+defineEmits(["fetch-word-cloud"]);
+
 const props = defineProps({
   words: {
     type: Array,
     default: () => []
+  },
+  wordLoading: {
+    type: Boolean,
+    default: false
   },
   stats: {
     type: Object,
@@ -38,6 +49,12 @@ const props = defineProps({
 </script>
 
 <style scoped>
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 ul {
   list-style: none;
   padding-left: 0;
