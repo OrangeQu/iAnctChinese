@@ -17,5 +17,7 @@ public interface AnalysisService {
 
   AutoAnnotationResponse autoAnnotate(Long textId, String model);
 
+  AutoAnnotationResponse extractRelations(Long textId, String model);
+
   ModelAnalysisResponse runFullAnalysis(Long textId, String model);
 }

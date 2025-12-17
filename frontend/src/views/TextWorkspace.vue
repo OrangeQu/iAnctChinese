@@ -996,8 +996,7 @@ const handleExtractEntities = async () => {
 const handleExtractRelations = async () => {
   extractingRelations.value = true;
   try {
-    await handleContentSave(true);
-    await store.triggerAutoAnnotation(selectedModel.value);
+    await store.triggerRelationExtraction(selectedModel.value);
     ElMessage.success("关系已提取");
   } catch (error) {
     console.error("extract relations failed", error);

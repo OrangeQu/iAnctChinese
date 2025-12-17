@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { fetchTexts, fetchTextById, uploadText, updateTextCategory, exportText, deleteText as deleteTextApi, updateText as updateTextApi } from "@/api/texts";
 import { fetchEntities, fetchRelations, createEntity, createRelation, deleteEntity as deleteEntityApi, deleteRelation as deleteRelationApi } from "@/api/annotations";
-import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi } from "@/api/analysis";
+import { classifyText, fetchInsights, autoAnnotate, runFullAnalysis as runFullAnalysisApi, extractRelations } from "@/api/analysis";
 import { fetchSections, updateSection as updateSectionApi } from "@/api/sections";
 import { fetchNavigationTree } from "@/api/navigation";
 import { searchTexts } from "@/api/search";
@@ -252,6 +252,13 @@ export const useTextStore = defineStore("textStore", {
         return;
       }
       await autoAnnotate(this.selectedTextId, model);
+      await this.selectText(this.selectedTextId, { force: true });
+    },
+    async triggerRelationExtraction(model) {
+      if (!this.selectedTextId) {
+        return;
+      }
+      await extractRelations(this.selectedTextId, model);
       await this.selectText(this.selectedTextId, { force: true });
     },
     async runFullAnalysis(model) {

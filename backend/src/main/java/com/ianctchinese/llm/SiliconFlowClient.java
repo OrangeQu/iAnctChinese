@@ -8,11 +8,13 @@ import com.ianctchinese.llm.dto.AnnotationPayload.AnnotationRelation;
 import com.ianctchinese.llm.dto.AnnotationPayload.WordCloudItem;
 import com.ianctchinese.llm.dto.ClassificationPayload;
 import com.ianctchinese.llm.dto.SentenceSuggestion;
+import com.ianctchinese.model.EntityAnnotation;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -529,6 +531,32 @@ public class SiliconFlowClient {
       return node;
     } catch (Exception ex) {
       log.warn("SiliconFlow analyzeProcessCycle error: {}", ex.getMessage());
+      return null;
+    }
+  }
+
+  public JsonNode analyzeRelations(String textContent, List<EntityAnnotation> entities, String modelName) {
+    String systemPrompt = "你是古文知识图谱助手。只使用提供的实体列表，分析它们之间的关系，并输出JSON。";
+    String shortContent = textContent.length() > 4000 ? textContent.substring(0, 4000) : textContent;
+    String entityList = entities.stream()
+        .filter(e -> e.getLabel() != null && !e.getLabel().isBlank())
+        .limit(50)
+        .map(e -> "- " + e.getLabel() + " (" + (e.getCategory() != null ? e.getCategory().name() : "CUSTOM") + ")")
+        .collect(Collectors.joining("\n"));
+    String userPrompt = """
+文本：
+%s
+
+实体（仅可使用以下名称推导关系）：
+%s
+
+输出JSON：
+{"relations":[{"sourceLabel":"","targetLabel":"","relationType":"FAMILY|ALLY|SUPPORT|RIVAL|CONFLICT|MENTOR|INFLUENCE|LOCATION_OF|PART_OF|CAUSE|TEMPORAL|TRAVEL|CUSTOM","confidence":0.7,"description":""}]}
+""".formatted(shortContent, entityList);
+    try {
+      return sendAndParse(systemPrompt, userPrompt, modelName);
+    } catch (Exception ex) {
+      log.warn("SiliconFlow analyzeRelations error: {}", ex.getMessage());
       return null;
     }
   }

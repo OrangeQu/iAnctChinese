@@ -257,6 +257,29 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   @Override
   @Transactional
+  public AutoAnnotationResponse extractRelations(Long textId, String model) {
+    TextDocument document = loadText(textId);
+    List<EntityAnnotation> entities = entityAnnotationRepository.findByTextDocumentId(textId);
+    if (entities.isEmpty()) {
+      throw new IllegalArgumentException("当前文本没有可供分析的实体，请先提取或手动添加实体");
+    }
+    JsonNode relationsResult = siliconFlowClient.analyzeRelations(document.getContent(), entities, model);
+    List<AnnotationRelation> payloadRelations = parseRelationPayload(relationsResult);
+    if (payloadRelations.isEmpty()) {
+      payloadRelations = buildHeuristicRelations(convertToAnnotationEntities(entities));
+    }
+    relationAnnotationRepository.deleteByTextDocumentId(textId);
+    List<RelationAnnotation> savedRelations = saveRelations(document, payloadRelations, entities);
+    return AutoAnnotationResponse.builder()
+        .textId(textId)
+        .createdEntities(0)
+        .createdRelations(savedRelations.size())
+        .message("已根据当前实体生成关系")
+        .build();
+  }
+
+  @Override
+  @Transactional
   public ModelAnalysisResponse runFullAnalysis(Long textId, String model) {
     try {
       return doRunFullAnalysis(textId, model);
@@ -488,6 +511,39 @@ public class AnalysisServiceImpl implements AnalysisService {
           .build());
     }
     return relations;
+  }
+
+  private List<AnnotationRelation> parseRelationPayload(JsonNode node) {
+    List<AnnotationRelation> relations = new ArrayList<>();
+    if (node != null && node.has("relations") && node.get("relations").isArray()) {
+      node.get("relations").forEach(item -> {
+        String source = item.path("sourceLabel").asText();
+        String target = item.path("targetLabel").asText();
+        if (source == null || source.isBlank() || target == null || target.isBlank()) {
+          return;
+        }
+        relations.add(AnnotationRelation.builder()
+            .sourceLabel(source)
+            .targetLabel(target)
+            .relationType(item.path("relationType").asText("CUSTOM"))
+            .confidence(item.path("confidence").asDouble(0.6))
+            .description(item.path("description").asText(""))
+            .build());
+      });
+    }
+    return relations;
+  }
+
+  private List<AnnotationEntity> convertToAnnotationEntities(List<EntityAnnotation> entities) {
+    return entities.stream()
+        .map(e -> AnnotationEntity.builder()
+            .label(e.getLabel())
+            .category(e.getCategory() != null ? e.getCategory().name() : "CUSTOM")
+            .startOffset(Optional.ofNullable(e.getStartOffset()).orElse(0))
+            .endOffset(Optional.ofNullable(e.getEndOffset()).orElse(0))
+            .confidence(Optional.ofNullable(e.getConfidence()).orElse(0.5))
+            .build())
+        .collect(Collectors.toList());
   }
 
   private TextDocument loadText(Long textId) {

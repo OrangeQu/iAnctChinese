@@ -21,3 +21,9 @@ export const runFullAnalysis = (textId, model) => {
     params: model ? { model } : {}
   });
 };
+
+export const extractRelations = (textId, model) => {
+  return apiClient.post(`/analysis/${textId}/relations`, null, {
+    params: model ? { model } : {}
+  });
+};
