@@ -39,6 +39,12 @@ public class TextAnalysisController {
     return ResponseEntity.ok(analysisService.extractRelations(textId, model));
   }
 
+  @PostMapping("/{textId}/segments")
+  public ResponseEntity<AutoAnnotationResponse> analyzeSegments(@PathVariable("textId") Long textId,
+      @RequestParam(value = "model", required = false) String model) {
+    return ResponseEntity.ok(analysisService.analyzeSentences(textId, model));
+  }
+
   @PostMapping("/{textId}/full")
   public ResponseEntity<ModelAnalysisResponse> fullAnalysis(@PathVariable("textId") Long textId,
       @RequestParam(value = "model", required = false) String model) {

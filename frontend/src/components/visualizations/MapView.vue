@@ -207,7 +207,7 @@ const showNonLocationEntities = ref(false);
 const routeEditorOpen = ref(false);
 
 const modelOptions = [
-  { id: "deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3" },
+  { id: "deepseek-ai/DeepSeek-V3.2", label: "DeepSeek-V3.2" },
   { id: "deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1" },
   { id: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5-72B" },
   { id: "Qwen/Qwen3-8B", label: "Qwen3-8B" }

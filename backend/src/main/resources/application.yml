@@ -49,7 +49,7 @@ logging:
 
 siliconflow:
   api-key: sk-rozyqiofobetxzpozmiqfxnwemhvpxvotndkbugnrkaurcwj
-  default-model: deepseek-ai/DeepSeek-V3
+  default-model: deepseek-ai/DeepSeek-V3.2
 
 
 

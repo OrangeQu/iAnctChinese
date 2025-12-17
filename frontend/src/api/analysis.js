@@ -27,3 +27,9 @@ export const extractRelations = (textId, model) => {
     params: model ? { model } : {}
   });
 };
+
+export const segmentText = (textId, model) => {
+  return apiClient.post(`/analysis/${textId}/segments`, null, {
+    params: model ? { model } : {}
+  });
+};

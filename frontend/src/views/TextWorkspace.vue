@@ -150,7 +150,12 @@
       </section>
 
       <section class="panel sentence-panel">
-        <h3 class="section-title">句读/分段</h3>
+        <div class="section-heading">
+          <h3 class="section-title">句读/分段</h3>
+          <el-button size="small" type="primary" plain :loading="segmenting" @click="handleSegmentAnalysis">
+            自动句读分析
+          </el-button>
+        </div>
         <div class="segments" v-if="sections.length">
           <div v-for="section in sections" :key="section.id" class="segment-card">
             <div class="segment-row">
@@ -298,6 +303,7 @@ const llmModels = [
 ];
 
 const selectedModel = ref(llmModels[0].id);
+const segmenting = ref(false);
 const editableContent = ref("");
 const savingContent = ref(false);
 const extractingEntities = ref(false);
@@ -1172,6 +1178,13 @@ onMounted(() => {
   min-height: 200px;
 }
 
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
 @media (max-width: 1200px) {
   .stage-grid {
     grid-template-columns: 1fr;
@@ -1460,3 +1473,16 @@ onMounted(() => {
   gap: 8px;
 }
 </style>
+const handleSegmentAnalysis = async () => {
+  segmenting.value = true;
+  try {
+    await handleContentSave(true);
+    await store.runSentenceSegmentation(selectedModel.value);
+    ElMessage.success("句读分析完成");
+  } catch (error) {
+    console.error("segment analysis failed", error);
+    ElMessage.error("句读分析失败，请稍后重试");
+  } finally {
+    segmenting.value = false;
+  }
+};

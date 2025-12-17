@@ -241,17 +241,11 @@ public class AnalysisServiceImpl implements AnalysisService {
       relations = saveHeuristicRelations(document, entities);
     }
 
-    if (!payload.getSentences().isEmpty()) {
-      textSectionService.replaceSections(textId, toSegmentRequests(textId, payload.getSentences()));
-    } else {
-      textSectionService.autoSegment(textId);
-    }
-
     return AutoAnnotationResponse.builder()
         .textId(textId)
         .createdEntities(entities.size())
         .createdRelations(relations.size())
-        .message("模型已生成实体、关系与句读，可在前端继续校对。")
+        .message("模型已生成实体与关系，可在前端继续校对。")
         .build();
   }
 
@@ -275,6 +269,22 @@ public class AnalysisServiceImpl implements AnalysisService {
         .createdEntities(0)
         .createdRelations(savedRelations.size())
         .message("已根据当前实体生成关系")
+        .build();
+  }
+
+  @Override
+  @Transactional
+  public AutoAnnotationResponse analyzeSentences(Long textId, String model) {
+    TextDocument document = loadText(textId);
+    AnnotationPayload payload = siliconFlowClient.annotateText(document.getContent(), model);
+    if (!payload.getSentences().isEmpty()) {
+      // 句读分析将通过专门的接口触发，此处不覆盖
+    }
+    return AutoAnnotationResponse.builder()
+        .textId(textId)
+        .createdEntities(0)
+        .createdRelations(0)
+        .message(payload.getSentences().isEmpty() ? "模型未返回句读，已回退为自动分句" : "句读分析完成")
         .build();
   }
 
@@ -403,7 +413,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         .textId(textId)
         .createdEntities(entities.size())
         .createdRelations(relations.size())
-        .message("模型已生成实体、关系与句读，可在前端继续校对。")
+        .message("模型已生成实体与关系，可在前端继续校对。")
         .build();
 
     // ============ 第三阶段：构建洞察（已优化为并行） ============
