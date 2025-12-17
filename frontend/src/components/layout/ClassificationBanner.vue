@@ -26,7 +26,6 @@
       </el-select>
       <el-button type="primary" @click="$emit('update-category', selectedCategory)">保存类型</el-button>
       <el-button @click="$emit('classify')" :loading="loading">重新判定</el-button>
-      <el-button type="warning" @click="$emit('auto-annotate')">自动标注示例</el-button>
     </div>
   </section>
 </template>
@@ -49,7 +48,7 @@ const props = defineProps({
   }
 });
 
-defineEmits(["classify", "update-category", "auto-annotate"]);
+defineEmits(["classify", "update-category"]);
 
 const labelMap = {
   warfare: "战争纪实",

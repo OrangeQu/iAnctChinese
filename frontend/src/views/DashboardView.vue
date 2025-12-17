@@ -41,14 +41,13 @@
 
     <!-- 2. 统计分析阶段 -->
     <div v-else-if="stage === 'analysis'" class="analysis-stage" v-loading="isDataLoading">
-      <ClassificationBanner
-        :current-category="store.selectedText?.category || ''"
-        :classification="store.classification"
-        :loading="store.loading"
-        @classify="store.classifySelectedText"
-        @auto-annotate="store.triggerAutoAnnotation"
-        @update-category="store.updateSelectedCategory"
-      />
+        <ClassificationBanner
+          :current-category="store.selectedText?.category || ''"
+          :classification="store.classification"
+          :loading="store.loading"
+          @classify="store.classifySelectedText"
+          @update-category="store.updateSelectedCategory"
+        />
       <div class="analysis-body">
         <aside class="panel insight-panel">
           <h3 class="section-title">实体列表</h3>
