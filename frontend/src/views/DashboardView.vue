@@ -76,9 +76,12 @@
           </div>
           <el-divider />
           <div class="filter-panel-wrapper">
-            <FilterPanel :filters="store.filters" :show-relation-filters="isRelationFilterVisible"
-              :entity-options="store.entityOptions" :relation-options="store.relationOptions"
-              @update:filters="handleFilterChange" />
+            <template v-if="showFilterPanel">
+              <FilterPanel :filters="store.filters" :show-relation-filters="isRelationFilterVisible"
+                :entity-options="store.entityOptions" :relation-options="store.relationOptions"
+                @update:filters="handleFilterChange" />
+            </template>
+            <div v-else class="filter-panel-blank"></div>
           </div>
         </section>
 
@@ -305,6 +308,7 @@ const viewOptions = computed(() => {
   return (category && viewPresets[category]) ? viewPresets[category] : viewPresets.default;
 });
 
+const showFilterPanel = computed(() => viewType.value === "graph");
 const isRightPanelVisible = computed(() => viewType.value !== "map" && viewType.value !== "historyMap");
 const isRelationFilterVisible = computed(() => viewType.value === "graph");
 
