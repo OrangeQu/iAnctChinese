@@ -55,6 +55,7 @@
 
 <script setup>
 import { reactive, watch } from "vue";
+import { translateRelationLabel } from "@/constants/relationLabels";
 
 const props = defineProps({
   filters: {
@@ -116,17 +117,8 @@ const entityMap = {
   CUSTOM: "自定义"
 };
 
-const relationMap = {
-  CONFLICT: "对抗",
-  SUPPORT: "结盟",
-  TRAVEL: "行旅",
-  FAMILY: "亲属",
-  TEMPORAL: "时间",
-  CUSTOM: "自定义"
-};
-
 const translateEntity = (key) => entityMap[key] || key;
-const translateRelation = (key) => relationMap[key] || key;
+const translateRelation = (key) => translateRelationLabel(key);
 
 // 与地图标注颜色保持一致
 const legendItems = [

@@ -25,10 +25,12 @@ import com.ianctchinese.llm.dto.SentenceSuggestion;
 import com.ianctchinese.model.EntityAnnotation;
 import com.ianctchinese.model.EntityAnnotation.EntityCategory;
 import com.ianctchinese.model.RelationAnnotation;
+import com.ianctchinese.model.HiddenGeoMarker;
 import com.ianctchinese.model.RelationAnnotation.RelationType;
 import com.ianctchinese.model.TextDocument;
 import com.ianctchinese.model.TextSection;
 import com.ianctchinese.repository.EntityAnnotationRepository;
+import com.ianctchinese.repository.HiddenGeoMarkerRepository;
 import com.ianctchinese.repository.RelationAnnotationRepository;
 import com.ianctchinese.repository.TextDocumentRepository;
 import com.ianctchinese.repository.TextSectionRepository;
@@ -44,6 +46,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -83,6 +86,7 @@ public class AnalysisServiceImpl implements AnalysisService {
   private final SiliconFlowClient siliconFlowClient;
   private final GeoService geoService;
   private final Executor analysisTaskExecutor;
+  private final HiddenGeoMarkerRepository hiddenGeoMarkerRepository;
 
   @Override
   @Transactional
@@ -1282,8 +1286,14 @@ public class AnalysisServiceImpl implements AnalysisService {
 
   private List<MapPathPoint> buildMapPointsFromEntities(Long textId, List<EntityAnnotation> entities) {
     // 筛选出地点类型的实体
+    Set<Long> hiddenEntityIds = hiddenGeoMarkerRepository.findByTextId(textId).stream()
+        .map(HiddenGeoMarker::getEntityId)
+        .filter(Objects::nonNull)
+        .collect(Collectors.toSet());
+
     List<EntityAnnotation> locationEntities = entities.stream()
         .filter(e -> e.getCategory() == EntityCategory.LOCATION)
+        .filter(e -> e.getId() != null && !hiddenEntityIds.contains(e.getId()))
         .toList();
 
     if (locationEntities.isEmpty()) {

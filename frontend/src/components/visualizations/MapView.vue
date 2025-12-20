@@ -162,7 +162,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch,
 import { ElMessage } from "element-plus";
 import { Location, Delete } from "@element-plus/icons-vue";
 import { useTextStore } from "@/store/textStore";
-import { locateEntities } from "@/api/geo";
+import {
+  locateEntities,
+  saveMarkerPosition,
+  getMarkerPositions,
+  deleteMarkerById,
+  deleteMarkerForEntity,
+  hideMarker,
+  getHiddenMarkers
+} from "@/api/geo";
 
 const MARKER_ICON_LLM =
   "data:image/svg+xml;base64," +
@@ -230,6 +238,19 @@ const allEntityList = computed(() => {
   return base || [];
 });
 
+const availableEntityLookup = computed(() => {
+  const map = new Map();
+  allEntityList.value.forEach((entity) => {
+    if (entity) {
+      const key = entity.id != null ? String(entity.id) : entity.label;
+      if (key) {
+        map.set(key, entity);
+      }
+    }
+  });
+  return map;
+});
+
 const locationList = computed(() => {
   return allEntityList.value.filter((e) => e.category === "LOCATION");
 });
@@ -240,6 +261,150 @@ const selectableEntities = computed(() => {
   }
   return locationList.value.length ? locationList.value : allEntityList.value;
 });
+
+const savedMarkers = ref([]);
+const hiddenMarkers = ref([]);
+const locatedEntityIds = computed(() => {
+  const ids = new Set();
+  locatedMarkers.value.forEach((marker) => {
+    if (marker?.entityId != null) {
+      ids.add(String(marker.entityId));
+    }
+  });
+  return ids;
+});
+
+const hiddenEntityIds = computed(() => {
+  return new Set(
+    (hiddenMarkers.value || [])
+      .map((h) => h?.entityId)
+      .filter((id) => id != null)
+      .map((id) => String(id))
+  );
+});
+
+const hiddenLabels = computed(() => {
+  return new Set(
+    (hiddenMarkers.value || [])
+      .map((h) => h?.entityLabel?.trim())
+      .filter((label) => !!label)
+  );
+});
+let loadSavedMarkers;
+
+const normalizeStoredMarker = (marker) => {
+  if (!marker) return null;
+  const entityId = marker.entityId == null ? null : Number(marker.entityId);
+  const lat = Number(marker.latitude ?? marker.lat ?? marker.y);
+  const lng = Number(marker.longitude ?? marker.lng ?? marker.x);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  const lookup = availableEntityLookup.value;
+  const lookupKey = entityId != null ? String(entityId) : marker.entityLabel;
+  if (lookupKey && !lookup.has(lookupKey)) {
+    return null;
+  }
+  const category =
+    marker.category ||
+    marker.entityCategory ||
+    (entityId == null ? "CUSTOM" : "LOCATION");
+  return {
+    entityId,
+    markerId: marker.id,
+    label: marker.entityLabel ?? marker.label ?? marker.name ?? (entityId == null ? null : String(entityId)),
+    lat,
+    lng,
+    source: marker.source || "manual",
+    category
+  };
+};
+
+const buildStoredMarkerPayload = (marker, orderIndex = 0) => {
+  const textId = store.selectedTextId;
+  if (!textId) {
+    return null;
+  }
+  const rawId = marker.entityId ?? marker.id;
+  const entityId = rawId == null ? null : Number(rawId);
+  if (entityId == null || Number.isNaN(entityId)) {
+    return null;
+  }
+  const lat = Number(marker.latitude ?? marker.lat ?? marker.y);
+  const lng = Number(marker.longitude ?? marker.lng ?? marker.x);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  const category =
+    marker.category ||
+    marker.entityCategory ||
+    (entityId == null ? "CUSTOM" : "LOCATION");
+  return {
+    textId,
+    entityId,
+    entityLabel: marker.entityLabel ?? marker.label ?? marker.name ?? String(entityId),
+    category,
+    latitude: lat,
+    longitude: lng,
+    source: marker.source || "manual",
+    orderIndex
+  };
+};
+
+const persistMarkers = async (markers = []) => {
+  if (!markers.length || !store.selectedTextId) {
+    return;
+  }
+  const payloads = markers
+    .map((marker, index) => buildStoredMarkerPayload(marker, index))
+    .filter(Boolean);
+  if (!payloads.length) {
+    return;
+  }
+  await Promise.allSettled(payloads.map((payload) => saveMarkerPosition(payload)));
+  await loadSavedMarkers();
+  await loadHiddenMarkers();
+};
+
+const persistSingleMarker = async (marker, orderIndex = 0) => {
+  const payload = buildStoredMarkerPayload(marker, orderIndex);
+  if (!payload) {
+    return;
+  }
+  try {
+    await saveMarkerPosition(payload);
+    await loadSavedMarkers();
+    await loadHiddenMarkers();
+  } catch (err) {
+    console.warn("[MapView] persistSingleMarker failed", err);
+  }
+};
+
+const deleteSavedMarker = async (marker) => {
+  if (!marker) {
+    return;
+  }
+  const { markerId } = marker;
+  const entityIdRaw = marker.entityId ?? marker.id;
+  const entityIdNum = Number(entityIdRaw);
+  const entityLabel = (marker.label || marker.entityLabel || "").trim();
+  if (!markerId && entityIdRaw == null && !entityLabel) {
+    return;
+  }
+  try {
+    if (markerId) {
+      await deleteMarkerById(markerId);
+    } else if (store.selectedTextId && Number.isFinite(entityIdNum)) {
+      await deleteMarkerForEntity(store.selectedTextId, entityIdNum);
+    } else if (store.selectedTextId && entityLabel) {
+      await hideMarker({ textId: store.selectedTextId, entityLabel });
+    }
+    await loadHiddenMarkers();
+    await loadSavedMarkers();
+  } catch (err) {
+    console.warn("[MapView] deleteSavedMarker failed", err);
+  }
+};
 
 const filteredSidebarEntities = computed(() => {
   let list = selectableEntities.value;
@@ -269,7 +434,8 @@ const selectedEntityLabel = computed(() => {
 });
 
 const isEntityLocated = (entityId) => {
-  return locatedMarkers.value.some((m) => m.entityId === entityId);
+  if (entityId == null) return false;
+  return locatedEntityIds.value.has(String(entityId));
 };
 
 const getEntityColor = (category) => {
@@ -369,7 +535,7 @@ const clearMarkers = () => {
   locatedMarkers.value = [];
 };
 
-const addMarker = ({ entityId, label, lat, lng, source, category }) => {
+const addMarker = ({ entityId, label, lat, lng, source, category, markerId }) => {
   if (!markerLayer.value || !labelLayer.value || !window.TMap) return;
   const id = String(entityId);
   const position = toTMapLatLng(lat, lng);
@@ -383,7 +549,7 @@ const addMarker = ({ entityId, label, lat, lng, source, category }) => {
     id,
     styleId,
     position,
-    properties: { label, source, category: entityCategory, lat, lng }
+    properties: { label, source, category: entityCategory, lat, lng, markerId }
   });
   markerLayer.value.setGeometries(geos);
 
@@ -407,6 +573,7 @@ const updateLocatedMarkersList = () => {
     label: g.properties?.label || g.id,
     source: g.properties?.source || "llm",
     category: g.properties?.category || "LOCATION",
+    markerId: g.properties?.markerId,
     lat: g.position?.getLat?.() ?? g.position?.lat ?? g.properties?.lat,
     lng: g.position?.getLng?.() ?? g.position?.lng ?? g.properties?.lng
   }));
@@ -491,6 +658,54 @@ const focusToMarkers = (markers = null) => {
   }, 200);
 };
 
+let markerLoadSeq = 0;
+
+loadSavedMarkers = async () => {
+  if (!map.value || !store.selectedTextId) {
+    return;
+  }
+  const seq = ++markerLoadSeq;
+  try {
+    const { data } = await getMarkerPositions(store.selectedTextId);
+    if (seq !== markerLoadSeq) {
+      return;
+    }
+    const markers = (Array.isArray(data) ? data : []).map(normalizeStoredMarker).filter(Boolean);
+    savedMarkers.value = markers;
+    if (markers.length) {
+      focusToMarkers(markers);
+    }
+  } catch (err) {
+    console.error("[MapView] loadSavedMarkers failed", err);
+  }
+};
+
+const loadHiddenMarkers = async () => {
+  if (!store.selectedTextId) {
+    hiddenMarkers.value = [];
+    return;
+  }
+  try {
+    const { data } = await getHiddenMarkers(store.selectedTextId);
+    hiddenMarkers.value = Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error("[MapView] loadHiddenMarkers failed", err);
+  }
+};
+
+const isHiddenMarker = (marker) => {
+  if (!marker) return false;
+  const label = (marker.label || marker.entityLabel || "").trim();
+  if (label && hiddenLabels.value.has(label)) {
+    return true;
+  }
+  const id = marker.entityId ?? marker.id;
+  if (id != null && hiddenEntityIds.value.has(String(id))) {
+    return true;
+  }
+  return false;
+};
+
 const applyLlmPoints = () => {
   const markers = [];
   (llmPoints.value || []).forEach((p) => {
@@ -518,6 +733,9 @@ const updateMarkers = () => {
   clearMarkers();
 
   (props.points || []).forEach((p) => {
+    if (isHiddenMarker(p)) {
+      return;
+    }
     const lat = p.latitude ?? p.lat;
     const lng = p.longitude ?? p.lng;
     if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
@@ -823,6 +1041,10 @@ const handleMapClick = (evt) => {
     (e) => (e.id || e.label) === selectedEntityId.value
   );
   if (!target) return;
+  if (isEntityLocated(target.id || target.label)) {
+    ElMessage.warning("该实体已在地图上标注");
+    return;
+  }
   addMarkerWithDrag({
     entityId: target.id || target.label,
     label: target.label || target.name || target.id,
@@ -830,6 +1052,14 @@ const handleMapClick = (evt) => {
     lng: evt.latLng.getLng(),
     source: "manual",
     category: target.category
+  });
+  persistSingleMarker({
+    entityId: target.id || target.label,
+    label: target.label || target.name || target.id,
+    category: target.category,
+    lat: evt.latLng.getLat(),
+    lng: evt.latLng.getLng(),
+    source: "manual"
   });
   updatePolylines();
   focusToMarkers();
@@ -914,7 +1144,9 @@ const handleAutoLocate = async () => {
       entities
     });
     console.log("[MapView] locateEntities response:", data);
-    llmPoints.value = Array.isArray(data) ? data : data ? [data] : [];
+    const normalizedPoints = Array.isArray(data) ? data : data ? [data] : [];
+    llmPoints.value = normalizedPoints;
+    persistMarkers(normalizedPoints);
     console.log("[MapView] llmPoints after processing:", llmPoints.value);
     // watch 会自动调用 updateMarkersWithDrag 和 updatePolylines，所以这里不需要手动调用
     // updateMarkersWithDrag();
@@ -955,6 +1187,9 @@ const updateMarkersWithDrag = () => {
   });
 
   (llmPoints.value || []).forEach((p) => {
+    if (isHiddenMarker(p)) {
+      return;
+    }
     const lat = p.latitude ?? p.lat;
     const lng = p.longitude ?? p.lng;
     if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
@@ -967,6 +1202,27 @@ const updateMarkersWithDrag = () => {
         category: p.category
       });
     }
+  });
+
+  (savedMarkers.value || []).forEach((p) => {
+    if (isHiddenMarker(p)) {
+      return;
+    }
+    if (!p) return;
+    const lat = p.lat;
+    const lng = p.lng;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
+    }
+    allMarkers.push({
+      entityId: p.entityId ?? p.id ?? p.label,
+      label: p.label || p.entityLabel || p.name || p.id,
+      lat,
+      lng,
+      source: p.source || "manual",
+      category: p.category,
+      markerId: p.markerId
+    });
   });
 
   console.log("[MapView] Total markers to add:", allMarkers.length);
@@ -1070,7 +1326,7 @@ const focusMarker = (marker) => {
   map.value.setZoom(8);
 };
 
-const removeMarker = (marker) => {
+const removeMarker = async (marker) => {
   if (!markerLayer.value || !labelLayer.value) return;
   const id = String(marker.entityId);
   const geos = markerLayer.value.getGeometries().filter((g) => g.id !== id);
@@ -1081,7 +1337,8 @@ const removeMarker = (marker) => {
   manualRoutes.value = (manualRoutes.value || []).filter((r) => String(r.fromId) !== id && String(r.toId) !== id);
   saveManualRoutes();
   updatePolylines();
-  emit("marker-removed", { entityId: marker.entityId });
+  emit("marker-updated", { entityId: marker.entityId, source: "delete" });
+  await deleteSavedMarker(marker);
   ElMessage.success("已移除标注");
 };
 
@@ -1119,8 +1376,29 @@ watch(() => store.selectedTextId, () => {
   routeFromId.value = null;
   routeToId.value = null;
   nextTick(() => updatePolylines());
+  loadHiddenMarkers();
+  loadSavedMarkers();
 }, { immediate: true });
 watch(() => manualRoutes.value, () => saveManualRoutes(), { deep: true });
+
+watch(
+  savedMarkers,
+  () => {
+    if (!map.value) return;
+    updateMarkersWithDrag();
+    updatePolylines();
+  },
+  { deep: true }
+);
+
+watch(
+  () => map.value,
+  (value) => {
+    if (value && store.selectedTextId) {
+      loadSavedMarkers();
+    }
+  }
+);
 
 onMounted(async () => {
   await nextTick();

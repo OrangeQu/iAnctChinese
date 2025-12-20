@@ -8,6 +8,7 @@ import * as echarts from "echarts/core";
 import { GraphChart } from "echarts/charts";
 import { TitleComponent, TooltipComponent, LegendComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
+import { RELATION_LABELS } from "@/constants/relationLabels";
 
 // 注册 ECharts 必须的组件
 echarts.use([GraphChart, TitleComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -53,7 +54,9 @@ const buildOption = () => {
   }
 
   const allowedCategories = new Set(props.activeEntityCategories);
-  const allowedRelationTypes = new Set(props.activeRelationTypes);
+  const allowedRelationTypes = new Set(
+    (props.activeRelationTypes || []).map((type) => (type ? String(type).toUpperCase() : ""))
+  );
 
   // 2. 构建节点 (Nodes)
   const nodes = props.entities
@@ -98,11 +101,15 @@ const buildOption = () => {
       const sourceId = relation.source?.id || relation.sourceEntityId || relation.source;
       const targetId = relation.target?.id || relation.targetEntityId || relation.target;
       
-      return {
-        source: String(sourceId),
-        target: String(targetId),
-        value: relation.relationType || "关联" // 关系名称
-      };
+    const relationKey = relation.relationType || relation.type || "CUSTOM";
+    const normalizedKey = String(relationKey || "").toUpperCase();
+    const displayLabel = RELATION_LABELS[normalizedKey] || RELATION_LABELS.CUSTOM;
+    return {
+      source: String(sourceId),
+      target: String(targetId),
+      value: normalizedKey,
+      relationLabel: displayLabel
+    };
     })
     .filter((edge) => {
       // 过滤无效边
@@ -131,7 +138,7 @@ const buildOption = () => {
           return `<strong>${params.data.name}</strong><br/>类型: ${params.data.value}`;
         }
         // 连线 Tooltip
-        return `${params.name}<br/>关系: <strong>${params.data.value}</strong>`;
+        return `${params.name}<br/>关系: <strong>${params.data.relationLabel || params.data.value}</strong>`;
       }
     },
     series: [
@@ -149,9 +156,9 @@ const buildOption = () => {
         edgeLabel: {
           show: true,
           fontSize: 10,
-          formatter: "{c}", // 显示关系名
+          formatter: (param) => param?.data?.relationLabel || param?.data?.value,
           color: "#666",
-          backgroundColor: '#fff', // 白底，防遮挡
+          backgroundColor: '#fff',
           padding: [2, 4],
           borderRadius: 4
         },

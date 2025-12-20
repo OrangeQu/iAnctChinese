@@ -202,6 +202,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import { Mark } from "@tiptap/core";
 import { TextSelection, Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
+import { translateRelationLabel } from "@/constants/relationLabels";
 
 const EntityMark = Mark.create({
   name: "entity",
@@ -242,7 +243,6 @@ const authStore = useAuthStore();
 const llmModels = [
   { id: "deepseek-ai/DeepSeek-V3.2", label: "DeepSeek-V3.2", isThinking: false },
   { id: "deepseek-ai/DeepSeek-V3.2-Exp", label: "deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
-  { id: "Pro/deepseek-ai/DeepSeek-V3.2-Exp", label: "Pro/deepseek-ai/DeepSeek-V3.2-Exp", isThinking: false },
   { id: "inclusionAI/Ling-1T", label: "inclusionAI/Ling-1T", isThinking: false },
   { id: "zai-org/GLM-4.6", label: "zai-org/GLM-4.6", isThinking: false },
   { id: "moonshotai/Kimi-K2-Instruct-0905", label: "moonshotai/Kimi-K2-Instruct-0905", isThinking: false },
@@ -1078,27 +1078,6 @@ const translateCategoryLabel = (cat) => {
     OTHER: "其他"
   };
   return map[cat] || cat || "未分类";
-};
-
-const translateRelationLabel = (rel) => {
-  if (!rel) return "其他";
-  const key = String(rel).toUpperCase();
-  const map = {
-    FAMILY: "亲属",
-    ALLY: "结盟/支持",
-    SUPPORT: "结盟/支持",
-    RIVAL: "对抗/敌对",
-    CONFLICT: "对抗/敌对",
-    MENTOR: "师承/同门",
-    INFLUENCE: "影响/启发",
-    LOCATION_OF: "所在",
-    PART_OF: "隶属",
-    CAUSE: "因果",
-    TRAVEL: "行旅",
-    TEMPORAL: "时间/时序",
-    CUSTOM: "其他"
-  };
-  return map[key] || rel || "未知";
 };
 
 onBeforeUnmount(() => {
