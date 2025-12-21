@@ -6,7 +6,6 @@ import com.ianctchinese.dto.ModelAnalysisResponse;
 import com.ianctchinese.dto.SentenceSegmentRequest;
 import com.ianctchinese.dto.TextInsightsResponse;
 import com.ianctchinese.dto.TextInsightsResponse.BattleEvent;
-import com.ianctchinese.dto.TextInsightsResponse.FamilyNode;
 import com.ianctchinese.dto.TextInsightsResponse.MapPathPoint;
 import com.ianctchinese.dto.TextInsightsResponse.OfficialNode;
 import com.ianctchinese.dto.TextInsightsResponse.ProcessStep;
@@ -145,11 +144,6 @@ public class AnalysisServiceImpl implements AnalysisService {
       return buildBattleTimeline(category, content);
     }, analysisTaskExecutor);
 
-    CompletableFuture<List<FamilyNode>> familyTreeFuture = CompletableFuture.supplyAsync(() -> {
-      log.info("并行构建：家族树");
-      return buildFamilyTree(category, entities, relations);
-    }, analysisTaskExecutor);
-
     CompletableFuture<List<OfficialNode>> officialTreeFuture = CompletableFuture.supplyAsync(() -> {
       log.info("并行构建：官职树（可能调用LLM）");
       return buildOfficialTree(category, content, entities, relations);
@@ -164,18 +158,16 @@ public class AnalysisServiceImpl implements AnalysisService {
     List<TimelineEvent> timeline;
     List<MapPathPoint> mapPoints;
     List<BattleEvent> battleTimeline;
-    List<FamilyNode> familyTree;
     List<OfficialNode> officialTree;
     List<ProcessStep> processCycle;
 
     try {
       log.info("等待所有可视化图谱构建完成...");
-      timeline = timelineFuture.get(30, TimeUnit.SECONDS);
-      mapPoints = mapPointsFuture.get(30, TimeUnit.SECONDS);
-      battleTimeline = battleTimelineFuture.get(30, TimeUnit.SECONDS);
-      familyTree = familyTreeFuture.get(30, TimeUnit.SECONDS);
-      officialTree = officialTreeFuture.get(30, TimeUnit.SECONDS);
-      processCycle = processCycleFuture.get(30, TimeUnit.SECONDS);
+      timeline = timelineFuture.get(60, TimeUnit.SECONDS);
+      mapPoints = mapPointsFuture.get(60, TimeUnit.SECONDS);
+      battleTimeline = battleTimelineFuture.get(60, TimeUnit.SECONDS);
+      officialTree = officialTreeFuture.get(60, TimeUnit.SECONDS);
+      processCycle = processCycleFuture.get(60, TimeUnit.SECONDS);
       log.info("所有可视化图谱构建完成");
     } catch (TimeoutException e) {
       log.error("构建洞察时超时，使用部分结果", e);
@@ -183,7 +175,6 @@ public class AnalysisServiceImpl implements AnalysisService {
       timeline = timelineFuture.isDone() ? timelineFuture.join() : Collections.emptyList();
       mapPoints = mapPointsFuture.isDone() ? mapPointsFuture.join() : Collections.emptyList();
       battleTimeline = battleTimelineFuture.isDone() ? battleTimelineFuture.join() : Collections.emptyList();
-      familyTree = familyTreeFuture.isDone() ? familyTreeFuture.join() : Collections.emptyList();
       officialTree = officialTreeFuture.isDone() ? officialTreeFuture.join() : Collections.emptyList();
       processCycle = processCycleFuture.isDone() ? processCycleFuture.join() : Collections.emptyList();
     } catch (InterruptedException | ExecutionException e) {
@@ -201,7 +192,6 @@ public class AnalysisServiceImpl implements AnalysisService {
         .timeline(timeline)
         .mapPoints(mapPoints)
         .battleTimeline(battleTimeline)
-        .familyTree(familyTree)
         .officialTree(officialTree)
         .processCycle(processCycle)
         .recommendedViews(recommendedViews)
@@ -832,7 +822,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     List<TimelineEvent> events = new ArrayList<>();
     try {
       for (CompletableFuture<TimelineEvent> future : futureEvents) {
-        events.add(future.get(30, TimeUnit.SECONDS));
+        events.add(future.get(60, TimeUnit.SECONDS));
       }
       log.info("所有事件影响分析完成，共{}个事件", events.size());
     } catch (TimeoutException e) {
@@ -1368,186 +1358,15 @@ public class AnalysisServiceImpl implements AnalysisService {
   }
 
   /**
-   * 从大模型分析的实体和关系中构建家族树
+   * 根据文本类型返回推荐视图列表
    */
-  private List<FamilyNode> buildFamilyTree(String category, List<EntityAnnotation> entities, List<RelationAnnotation> relations) {
-    if (!"biography".equals(category)) {
-      return Collections.emptyList();
-    }
-
-    // 1. 找出所有人物实体
-    List<EntityAnnotation> persons = entities.stream()
-        .filter(e -> e.getCategory() == EntityCategory.PERSON)
-        .collect(Collectors.toList());
-
-    if (persons.isEmpty()) {
-      return Collections.emptyList();
-    }
-
-    // 2. 找出所有家族关系
-    List<RelationAnnotation> familyRelations = relations.stream()
-        .filter(r -> r.getRelationType() == RelationType.FAMILY)
-        .collect(Collectors.toList());
-
-    if (familyRelations.isEmpty()) {
-      // 如果没有家族关系，不返回任何节点（而不是显示"相关人物"）
-      return Collections.emptyList();
-    }
-
-    // 3. 构建家族关系图
-    Map<String, FamilyNodeBuilder> nodeMap = new HashMap<>();
-
-    // 初始化人物节点（仅包含有家族关系的人物）
-    Set<String> involvedPersons = new HashSet<>();
-    for (RelationAnnotation relation : familyRelations) {
-      if (relation.getSource() != null) {
-        involvedPersons.add(relation.getSource().getLabel());
-      }
-      if (relation.getTarget() != null) {
-        involvedPersons.add(relation.getTarget().getLabel());
-      }
-    }
-
-    for (String personName : involvedPersons) {
-      nodeMap.put(personName, new FamilyNodeBuilder(personName));
-    }
-
-    // 4. 处理家族关系
-    for (RelationAnnotation relation : familyRelations) {
-      if (relation.getSource() == null || relation.getTarget() == null) {
-        continue;
-      }
-
-      String sourceName = relation.getSource().getLabel();
-      String targetName = relation.getTarget().getLabel();
-      String relationDesc = relation.getEvidence();
-
-      if (nodeMap.containsKey(sourceName) && nodeMap.containsKey(targetName)) {
-        FamilyNodeBuilder sourceNode = nodeMap.get(sourceName);
-        FamilyNodeBuilder targetNode = nodeMap.get(targetName);
-
-        // 根据关系描述判断亲属关系
-        String relationType = inferRelationType(relationDesc, sourceName, targetName);
-
-        // 只有明确的家族关系才构建树
-        if (relationType.equals("相关")) {
-          continue; // 跳过不明确的关系
-        }
-
-        // 添加父子关系
-        if (relationType.contains("父") || relationType.contains("母") || relationType.contains("祖")) {
-          sourceNode.addChild(targetNode, getChildRelation(relationType));
-          targetNode.markAsChild();
-        } else if (relationType.contains("子") || relationType.contains("女")) {
-          targetNode.addChild(sourceNode, relationType);
-          sourceNode.markAsChild();
-        }
-      }
-    }
-
-    // 5. 找出根节点（没有被标记为子节点的节点）
-    List<FamilyNode> roots = new ArrayList<>();
-    for (FamilyNodeBuilder builder : nodeMap.values()) {
-      if (!builder.isChild()) {
-        FamilyNode node = builder.build();
-        if (node.getChildren() != null && !node.getChildren().isEmpty()) {
-          roots.add(node);
-        }
-      }
-    }
-
-    return roots;
-  }
-
-  /**
-   * 根据父辈关系推断子辈关系
-   */
-  private String getChildRelation(String parentRelation) {
-    if (parentRelation.contains("父")) return "子";
-    if (parentRelation.contains("母")) return "子";
-    if (parentRelation.contains("祖父")) return "孙";
-    if (parentRelation.contains("祖母")) return "孙";
-    return "后代";
-  }
-
-  /**
-   * 推断家族关系类型
-   */
-  private String inferRelationType(String description, String source, String target) {
-    if (description == null) {
-      return "相关";
-    }
-
-    String desc = description.toLowerCase();
-    if (desc.contains("父") || desc.contains("father")) return "父";
-    if (desc.contains("母") || desc.contains("mother")) return "母";
-    if (desc.contains("子") || desc.contains("son")) return "子";
-    if (desc.contains("女") || desc.contains("daughter")) return "女";
-    if (desc.contains("兄") || desc.contains("brother")) return "兄";
-    if (desc.contains("弟")) return "弟";
-    if (desc.contains("姐") || desc.contains("sister")) return "姐";
-    if (desc.contains("妹")) return "妹";
-    if (desc.contains("妻") || desc.contains("wife")) return "妻";
-    if (desc.contains("夫") || desc.contains("husband")) return "夫";
-    if (desc.contains("祖父") || desc.contains("grandfather")) return "祖父";
-    if (desc.contains("祖母") || desc.contains("grandmother")) return "祖母";
-    if (desc.contains("孙") || desc.contains("grandson")) return "孙";
-
-    return "相关";
-  }
-
-  /**
-   * 家族节点构建器（用于构建树结构）
-   */
-  private static class FamilyNodeBuilder {
-    private final String name;
-    private String relation = "本人";
-    private final List<FamilyNodeBuilder> children = new ArrayList<>();
-    private boolean isChildNode = false;
-
-    public FamilyNodeBuilder(String name) {
-      this.name = name;
-    }
-
-    public void setRelation(String relation) {
-      this.relation = relation;
-    }
-
-    public void addChild(FamilyNodeBuilder child, String childRelation) {
-      child.setRelation(childRelation);
-      children.add(child);
-    }
-
-    public List<FamilyNodeBuilder> getChildren() {
-      return children;
-    }
-
-    public void markAsChild() {
-      this.isChildNode = true;
-    }
-
-    public boolean isChild() {
-      return isChildNode;
-    }
-
-    public FamilyNode build() {
-      return FamilyNode.builder()
-          .name(name)
-          .relation(relation)
-          .children(children.stream()
-              .map(FamilyNodeBuilder::build)
-              .collect(Collectors.toList()))
-          .build();
-    }
-  }
-
   private List<String> buildRecommendedViews(String category) {
     return switch (category) {
-      case "travelogue" -> List.of("地图", "时间轴", "词云");
-      case "biography" -> List.of("时间轴", "亲情树", "知识图谱");
+      case "travelogue" -> List.of("地图", "时间轴", "知识图谱");
+      case "biography" -> List.of("时间轴", "知识图谱");
       case "official" -> List.of("官职树", "知识图谱", "时间轴");
-      case "agriculture", "crafts" -> List.of("流程周期", "知识图谱", "词云");
-      default -> List.of("知识图谱", "对抗视图", "统计图表");
+      case "agriculture", "crafts" -> List.of("流程周期", "知识图谱");
+      default -> List.of("知识图谱");
     };
   }
 

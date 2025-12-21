@@ -15,7 +15,6 @@ public class TextInsightsResponse {
   private List<TimelineEvent> timeline;
   private List<MapPathPoint> mapPoints;
   private List<BattleEvent> battleTimeline;
-  private List<FamilyNode> familyTree;
   private List<OfficialNode> officialTree;
   private List<ProcessStep> processCycle;
   private List<String> recommendedViews;
@@ -74,15 +73,6 @@ public class TextInsightsResponse {
     private String description;
     private Integer intensity;
     private String opponent;
-  }
-
-  @Data
-  @Builder
-  public static class FamilyNode {
-
-    private String name;
-    private String relation;
-    private List<FamilyNode> children;
   }
 
   @Data

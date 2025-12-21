@@ -159,7 +159,6 @@ import TimelineView from "@/components/visualizations/TimelineView.vue";
 import MapView from "@/components/visualizations/MapView.vue";
 import StatsPanel from "@/components/visualizations/StatsPanel.vue";
 import ClassificationBanner from "@/components/layout/ClassificationBanner.vue";
-import FamilyTreeView from "@/components/visualizations/FamilyTreeView.vue";
 import BattleTimelineView from "@/components/visualizations/BattleTimelineView.vue";
 import TextWorkspace from "./TextWorkspace.vue";
 import HistoryMap from "@/components/visualizations/MapView.vue";
@@ -279,7 +278,6 @@ const viewPresets = {
     { value: "graph", label: "知识图谱" }
   ],
   biography: [
-    { value: "family", label: "亲情图" },
     { value: "timeline", label: "生平时间轴" },
     { value: "graph", label: "知识图谱" }
   ],
@@ -325,7 +323,6 @@ const componentMap = {
   timeline: TimelineView,
   map: MapView,
   historyMap: HistoryMap,
-  family: FamilyTreeView,
   battle: BattleTimelineView,
   officialTree: OfficialTreeView,
   processCycle: ProcessCycleView
@@ -363,7 +360,6 @@ const viewProps = computed(() => {
       };
     }
     case "battle": return { events: insights.value?.battleTimeline || [] };
-    case "family": return { nodes: insights.value?.familyTree || [] };
     case "officialTree": return { nodes: insights.value?.officialTree || [] };
     case "processCycle": return {
       steps: insights.value?.processCycle || [],
