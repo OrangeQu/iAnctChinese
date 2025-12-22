@@ -67,4 +67,12 @@ public class ProjectController {
     String username = auth.getName();
     return ResponseEntity.ok(projectService.removeMember(id, username, request.getUsername()));
   }
+
+  @PostMapping("/{id}/leave")
+  public ResponseEntity<ProjectResponse> leaveProject(
+      Authentication auth,
+      @PathVariable Long id) {
+    String username = auth.getName();
+    return ResponseEntity.ok(projectService.leaveProject(id, username));
+  }
 }

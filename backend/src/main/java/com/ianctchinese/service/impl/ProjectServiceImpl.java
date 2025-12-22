@@ -165,6 +165,30 @@ public class ProjectServiceImpl implements ProjectService {
     return toResponse(project, users.get(project.getOwnerId()), projectMembers(project, users));
   }
 
+  @Override
+  @Transactional
+  public ProjectResponse leaveProject(Long projectId, String username) {
+    User user = userRepository.findByUsername(username)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+    Project project = projectRepository.findByIdAndDeletedFalse(projectId)
+        .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+
+    // 检查用户是否是项目成员
+    ProjectMember membership = projectMemberRepository.findByProjectIdAndUserId(projectId, user.getId())
+        .orElseThrow(() -> new IllegalArgumentException("您不是该项目的成员"));
+
+    // 组长不能退出自己的项目
+    if (project.getOwnerId().equals(user.getId())) {
+      throw new IllegalArgumentException("组长不能退出项目，请先转让或删除项目");
+    }
+
+    // 删除成员关系
+    projectMemberRepository.delete(membership);
+
+    Map<Long, User> users = usersForProject(projectId, project.getOwnerId());
+    return toResponse(project, users.get(project.getOwnerId()), projectMembers(project, users));
+  }
+
   private void requireMember(Long projectId, Long userId) {
     if (!projectMemberRepository.existsByProjectIdAndUserId(projectId, userId)) {
       throw new IllegalArgumentException("无权访问此项目");

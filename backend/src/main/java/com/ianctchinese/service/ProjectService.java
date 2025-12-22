@@ -18,4 +18,6 @@ public interface ProjectService {
   ProjectResponse addMember(Long projectId, String ownerUsername, ProjectMemberRequest request);
 
   ProjectResponse removeMember(Long projectId, String ownerUsername, String targetUsername);
+
+  ProjectResponse leaveProject(Long projectId, String username);
 }

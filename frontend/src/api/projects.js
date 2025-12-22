@@ -18,5 +18,8 @@ export const projectApi = {
   },
   removeMember(id, data) {
     return apiClient.delete(`/projects/${id}/members`, { data });
+  },
+  leaveProject(id) {
+    return apiClient.post(`/projects/${id}/leave`);
   }
 };

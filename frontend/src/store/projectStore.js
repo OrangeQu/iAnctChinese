@@ -58,6 +58,15 @@ export const useProjectStore = defineStore("projectStore", {
       this._updateProjectCache(data);
       return data;
     },
+    async leaveProject(id) {
+      const { data } = await projectApi.leaveProject(id);
+      // 退出项目后，从本地列表中移除该项目
+      this.projects = this.projects.filter((p) => p.id !== id);
+      if (this.currentProject?.id === id) {
+        this.currentProject = null;
+      }
+      return data;
+    },
     _updateProjectCache(project) {
       if (!project) return;
       const idx = this.projects.findIndex((p) => p.id === project.id);

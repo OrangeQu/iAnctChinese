@@ -94,6 +94,14 @@
         >
           添加成员
         </el-button>
+        <el-button
+          v-if="!canManage"
+          size="small"
+          type="warning"
+          @click="handleLeaveProject"
+        >
+          退出项目
+        </el-button>
       </div>
       <el-table :data="activeProject?.members || []" border size="small">
         <el-table-column prop="username" label="用户名" />
@@ -101,7 +109,19 @@
         <el-table-column prop="role" label="角色" width="100" />
         <el-table-column label="操作" width="120">
           <template #default="{ row }">
+            <!-- 如果是当前用户且不是组长，显示"退出"按钮 -->
             <el-button
+              v-if="row.username === currentUsername && !canManage"
+              link
+              type="warning"
+              size="small"
+              @click="handleLeaveProject"
+            >
+              退出
+            </el-button>
+            <!-- 如果是组长，可以移除其他成员 -->
+            <el-button
+              v-else
               link
               type="danger"
               size="small"
@@ -195,6 +215,17 @@ const handleRemove = async (member) => {
     activeProject.value = projectStore.projects.find((p) => p.id === activeProject.value.id);
   } catch (e) {
     ElMessage.error(e.response?.data?.message || "移除失败");
+  }
+};
+
+const handleLeaveProject = async () => {
+  try {
+    await projectStore.leaveProject(activeProject.value.id);
+    ElMessage.success("已退出项目");
+    openMembers.value = false;
+    activeProject.value = null;
+  } catch (e) {
+    ElMessage.error(e.response?.data?.message || "退出失败");
   }
 };
 
