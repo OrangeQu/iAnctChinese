@@ -29,12 +29,10 @@ export const useAuthStore = defineStore('auth', {
         const response = await authApi.login(loginData);
         if (response.data.token) {
           this.token = response.data.token;
-          this.user = {
-            username: response.data.username,
-            email: response.data.email
-          };
-          this.isAuthenticated = true;
           localStorage.setItem('token', this.token);
+          this.isAuthenticated = true;
+          // 登录成功后立即加载完整的用户信息（包括id）
+          await this.loadUser();
           return { success: true, message: response.data.message };
         } else {
           return { success: false, message: response.data.message };

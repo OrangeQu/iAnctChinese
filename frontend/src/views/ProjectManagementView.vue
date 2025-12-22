@@ -20,7 +20,7 @@
             <div class="proj-name">
               <el-icon><Folder /></el-icon>
               <span>{{ row.name }}</span>
-              <el-tag v-if="row.ownerId === currentUserId" size="small" type="warning">组长</el-tag>
+              <el-tag v-if="isProjectOwner(row)" size="small" type="warning">组长</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -41,7 +41,7 @@
             <el-button size="small" type="success" @click="openProject(row)">打开项目</el-button>
             <el-button size="small" @click="showMembers(row)">项目详情</el-button>
             <el-popconfirm
-              v-if="row.ownerId === currentUserId"
+              v-if="isProjectOwner(row)"
               title="删除项目会同时软删除项目文档，确认删除？"
               confirm-button-text="删除"
               cancel-button-text="取消"
@@ -152,13 +152,23 @@ const authStore = useAuthStore();
 const projects = computed(() => projectStore.projects || []);
 const currentUserId = computed(() => authStore.user?.id);
 const currentUsername = computed(() => authStore.user?.username);
+
+// 判断是否是项目的组长
+const isProjectOwner = (project) => {
+  if (!project) return false;
+  // 优先通过 ownerId 判断
+  if (project.ownerId && currentUserId.value) {
+    return project.ownerId === currentUserId.value;
+  }
+  // 备用方案：通过 ownerName 判断
+  if (project.ownerName && currentUsername.value) {
+    return project.ownerName === currentUsername.value;
+  }
+  return false;
+};
+
 const canManage = computed(() => {
-  const ownerId = activeProject.value?.ownerId;
-  const ownerName = activeProject.value?.ownerName;
-  return (
-    (ownerId && currentUserId.value && ownerId === currentUserId.value) ||
-    (ownerName && currentUsername.value && ownerName === currentUsername.value)
-  );
+  return isProjectOwner(activeProject.value);
 });
 
 const openCreate = ref(false);
