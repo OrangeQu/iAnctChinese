@@ -94,6 +94,23 @@
               </el-radio-button>
             </el-radio-group>
 
+            <div class="insight-actions" v-if="insightAction.visible">
+              <el-tooltip
+                content="该步骤可能耗时较长"
+                placement="bottom"
+              >
+                <el-button
+                  size="small"
+                  type="primary"
+                  :loading="insightAction.loading"
+                  :disabled="!store.selectedTextId"
+                  @click="runInsightForCurrentView"
+                >
+                  {{ insightAction.label }}
+                </el-button>
+              </el-tooltip>
+            </div>
+
             <div class="recommended" v-if="insights?.recommendedViews?.length">
               <span>推荐视图：</span>
               <el-tag v-for="view in insights.recommendedViews" :key="view" size="small">
@@ -388,12 +405,62 @@ const handleJumpToText = (data) => {
   });
 };
 
-const ensureFullInsights = async () => {
-  if (stage.value !== "graph") return;
-  const currentMode = store.insights?.mode || "full";
-  const needFull = currentMode !== "full" && ["graph", "map", "historyMap"].includes(viewType.value);
-  if (needFull && store.selectedTextId) {
-    await store.loadInsights({ textId: store.selectedTextId, light: false });
+const insightLoading = ref(false);
+const viewToPart = {
+  timeline: { part: "timeline", name: "时间轴" },
+  map: { part: "mapPoints", name: "地图轨迹" },
+  historyMap: { part: "mapPoints", name: "战争地图" },
+  battle: { part: "battleTimeline", name: "战役时间轴" },
+  officialTree: { part: "officialTree", name: "官职体系图" },
+  processCycle: { part: "processCycle", name: "流程图" }
+};
+
+const hasPartData = (part) => {
+  const ins = store.insights || {};
+  switch (part) {
+    case "timeline":
+      return Array.isArray(ins.timeline) && ins.timeline.length > 0;
+    case "mapPoints":
+      return Array.isArray(ins.mapPoints) && ins.mapPoints.length > 0;
+    case "battleTimeline":
+      return Array.isArray(ins.battleTimeline) && ins.battleTimeline.length > 0;
+    case "officialTree":
+      return Array.isArray(ins.officialTree) && ins.officialTree.length > 0;
+    case "processCycle":
+      return Array.isArray(ins.processCycle) && ins.processCycle.length > 0;
+    default:
+      return false;
+  }
+};
+
+const insightAction = computed(() => {
+  if (stage.value !== "graph") return { visible: false };
+  const meta = viewToPart[viewType.value];
+  if (!meta) return { visible: false };
+  const done = hasPartData(meta.part);
+  return {
+    visible: true,
+    loading: insightLoading.value,
+    label: `${done ? "更新" : "生成"}${meta.name}`
+  };
+});
+
+const runInsightForCurrentView = async () => {
+  const meta = viewToPart[viewType.value];
+  if (!meta || !store.selectedTextId) return;
+  insightLoading.value = true;
+  try {
+    await store.loadInsights({
+      textId: store.selectedTextId,
+      light: false,
+      parts: [meta.part]
+    });
+    ElMessage.success(`${meta.name}已生成`);
+  } catch (error) {
+    console.error("run insight failed", error);
+    ElMessage.error(`${meta.name}生成失败，请稍后重试`);
+  } finally {
+    insightLoading.value = false;
   }
 };
 
@@ -457,7 +524,6 @@ watch(
 watch(stage, (val) => {
   localStorage.setItem(STORAGE_STAGE_KEY, val);
   if (val === "graph") {
-    ensureFullInsights();
     scheduleGraphGridResize();
   }
 }, { immediate: true });
@@ -468,13 +534,11 @@ watch(viewType, (val) => {
     perTextViews[String(store.selectedTextId)] = val;
     localStorage.setItem(STORAGE_VIEW_PER_TEXT_KEY, JSON.stringify(perTextViews));
   }
-  ensureFullInsights();
   scheduleGraphGridResize();
 });
 
 watch(() => store.selectedTextId, () => {
   if (stage.value === "graph") {
-    ensureFullInsights();
     scheduleGraphGridResize();
   }
 });

@@ -6,6 +6,10 @@ import com.ianctchinese.dto.ModelAnalysisResponse;
 import com.ianctchinese.dto.TextInsightsResponse;
 import com.ianctchinese.service.AnalysisService;
 import lombok.RequiredArgsConstructor;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -53,8 +57,19 @@ public class TextAnalysisController {
 
   @GetMapping("/{textId}/insights")
   public ResponseEntity<TextInsightsResponse> insights(@PathVariable("textId") Long textId,
-      @RequestParam(value = "light", defaultValue = "true") boolean light) {
-    return ResponseEntity.ok(analysisService.buildInsights(textId, light));
+      @RequestParam(value = "light", defaultValue = "true") boolean light,
+      @RequestParam(value = "parts", required = false) String parts) {
+    Set<String> partSet = null;
+    if (parts != null && !parts.isBlank()) {
+      partSet = Arrays.stream(parts.split(","))
+          .map(String::trim)
+          .filter(s -> !s.isBlank())
+          .collect(Collectors.toSet());
+      if (partSet.isEmpty()) {
+        partSet = Collections.emptySet();
+      }
+    }
+    return ResponseEntity.ok(analysisService.buildInsights(textId, light, partSet));
   }
 
   @GetMapping("/{textId}/word-cloud")

@@ -339,10 +339,45 @@ export const useTextStore = defineStore("textStore", {
         this.sections[index] = data;
       }
     },
-    async loadInsights({ textId = this.selectedTextId, light = false } = {}) {
+    async loadInsights({ textId = this.selectedTextId, light = false, parts } = {}) {
       if (!textId) return;
-      const params = light ? { light: true } : {};
+      const params = {
+        light: Boolean(light)
+      };
+      if (parts) {
+        const partString = Array.isArray(parts) ? parts.filter(Boolean).join(",") : String(parts);
+        if (partString && partString.trim()) {
+          params.parts = partString;
+        }
+      }
       const { data } = await fetchInsights(textId, params);
+
+      // 若按 parts 按需请求，则只更新请求的部分，避免用空数组覆盖已生成的其他洞察
+      const partSet = new Set();
+      if (params.parts) {
+        String(params.parts)
+          .split(",")
+          .map((p) => (p || "").trim())
+          .filter(Boolean)
+          .forEach((p) => partSet.add(p));
+      }
+
+      if (partSet.size) {
+        const current = this.insights || {};
+        const next = {
+          ...current,
+          ...data
+        };
+        // 仅覆盖被请求的字段
+        if (!partSet.has("timeline")) next.timeline = current.timeline;
+        if (!partSet.has("mapPoints")) next.mapPoints = current.mapPoints;
+        if (!partSet.has("battleTimeline")) next.battleTimeline = current.battleTimeline;
+        if (!partSet.has("officialTree")) next.officialTree = current.officialTree;
+        if (!partSet.has("processCycle")) next.processCycle = current.processCycle;
+        this.insights = next;
+        return;
+      }
+
       this.insights = data;
     },
     async loadNavigationTree(projectId = this.currentProjectId) {
