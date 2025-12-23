@@ -56,6 +56,7 @@
 <script setup>
 import { reactive, watch } from "vue";
 import { translateRelationLabel } from "@/constants/relationLabels";
+import { translateEntityLabel } from "@/constants/entityLabels";
 
 const props = defineProps({
   filters: {
@@ -102,22 +103,7 @@ const emitFilters = () => {
   emit("update:filters", { ...localFilters });
 };
 
-const labelMap = {
-  warfare: "战争纪实",
-  travelogue: "游记地理",
-  biography: "人物传记"
-};
-
-const entityMap = {
-  PERSON: "人物",
-  LOCATION: "地点",
-  EVENT: "事件",
-  ORGANIZATION: "组织",
-  OBJECT: "器物",
-  CUSTOM: "自定义"
-};
-
-const translateEntity = (key) => entityMap[key] || key;
+const translateEntity = translateEntityLabel;
 const translateRelation = (key) => translateRelationLabel(key);
 
 // 与地图标注颜色保持一致

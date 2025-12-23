@@ -40,7 +40,7 @@
           <ul class="chip-list">
             <li v-for="entity in store.entities" :key="entity.id">
               <span>{{ entity.label }}</span>
-              <small>{{ translateEntity(entity.category) }}</small>
+              <small>{{ translateEntityLabel(entity.category) }}</small>
             </li>
           </ul>
         </aside>
@@ -151,6 +151,7 @@ import { useTextStore } from "@/store/textStore";
 import { useAuthStore } from "@/store/authStore";
 import { ArrowDown, User, Right } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
+import { translateEntityLabel } from "@/constants/entityLabels";
 
 // 引入组件
 import FilterPanel from "@/components/filters/FilterPanel.vue";
@@ -406,8 +407,6 @@ const selectFromSearch = async (textId) => {
   searchDialogVisible.value = false;
   await store.selectText(textId);
 };
-
-const translateEntity = (cat) => cat === "PERSON" ? "人物" : cat;
 
 const updateGraphGridHeight = () => {
   if (stage.value !== "graph") return;
