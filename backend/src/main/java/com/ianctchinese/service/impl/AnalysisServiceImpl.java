@@ -125,10 +125,13 @@ public class AnalysisServiceImpl implements AnalysisService {
     // ============ 并行构建各种可视化图谱 ============
     // 这些图谱构建互不依赖，可以并行执行以加快速度
     // 使用自定义线程池，设置30秒超时
-    CompletableFuture<List<TimelineEvent>> timelineFuture = CompletableFuture.supplyAsync(() -> {
-      log.info("并行构建：时间轴");
-      return buildTimelineFromEntities(text, entities, relations);
-    }, analysisTaskExecutor);
+    // Light 模式用于“快速进入页面”，必须避免任何慢的外部依赖（LLM/地图等）。
+    CompletableFuture<List<TimelineEvent>> timelineFuture = light
+        ? CompletableFuture.completedFuture(Collections.emptyList())
+        : CompletableFuture.supplyAsync(() -> {
+          log.info("并行构建：时间轴");
+          return buildTimelineFromEntities(text, entities, relations);
+        }, analysisTaskExecutor);
 
     CompletableFuture<List<MapPathPoint>> mapPointsFuture = CompletableFuture.supplyAsync(() -> {
       if (light) {
@@ -139,20 +142,28 @@ public class AnalysisServiceImpl implements AnalysisService {
       return buildMapPointsFromEntities(textId, entities);
     }, analysisTaskExecutor);
 
-    CompletableFuture<List<BattleEvent>> battleTimelineFuture = CompletableFuture.supplyAsync(() -> {
-      log.info("并行构建：战役时间轴（调用LLM）");
-      return buildBattleTimeline(category, content);
-    }, analysisTaskExecutor);
+    // Light 模式用于“快速进入页面”，必须避免任何慢的外部依赖（LLM/地图等）。
+    // 目前前端进入文档时会请求 insights?light=true，如果这里仍调用 LLM，会导致“读取文档数据”长期卡住。
+    CompletableFuture<List<BattleEvent>> battleTimelineFuture = light
+        ? CompletableFuture.completedFuture(Collections.emptyList())
+        : CompletableFuture.supplyAsync(() -> {
+          log.info("并行构建：战役时间轴（调用LLM）");
+          return buildBattleTimeline(category, content);
+        }, analysisTaskExecutor);
 
-    CompletableFuture<List<OfficialNode>> officialTreeFuture = CompletableFuture.supplyAsync(() -> {
-      log.info("并行构建：官职树（可能调用LLM）");
-      return buildOfficialTree(category, content, entities, relations);
-    }, analysisTaskExecutor);
+    CompletableFuture<List<OfficialNode>> officialTreeFuture = light
+        ? CompletableFuture.completedFuture(Collections.emptyList())
+        : CompletableFuture.supplyAsync(() -> {
+          log.info("并行构建：官职树（可能调用LLM）");
+          return buildOfficialTree(category, content, entities, relations);
+        }, analysisTaskExecutor);
 
-    CompletableFuture<List<ProcessStep>> processCycleFuture = CompletableFuture.supplyAsync(() -> {
-      log.info("并行构建：流程周期");
-      return buildProcessCycle(category, content, entities, relations);
-    }, analysisTaskExecutor);
+    CompletableFuture<List<ProcessStep>> processCycleFuture = light
+        ? CompletableFuture.completedFuture(Collections.emptyList())
+        : CompletableFuture.supplyAsync(() -> {
+          log.info("并行构建：流程周期");
+          return buildProcessCycle(category, content, entities, relations);
+        }, analysisTaskExecutor);
 
     // 等待所有并行任务完成（设置30秒超时）
     List<TimelineEvent> timeline;

@@ -66,79 +66,64 @@ export const useTextStore = defineStore("textStore", {
       }
     },
     async selectText(id, { force = false } = {}) {
-      if (!id) {
-        return;
-      }
+      if (!id) return;
       if (!force && id === this.selectedTextId && this.selectedText && !this.detailLoading) {
         // 已有当前文档的数据，避免重复请求导致卡顿
         return;
       }
+
       const requestToken = Symbol("textRequest");
       this.currentRequestToken = requestToken;
       this.selectedTextId = id;
       this.loading = true;
       this.detailLoading = true;
       this.detailProgress = 0;
-      try {
-        // 先拿正文，尽快渲染基础页面，再异步拉其他数据，避免整页长时间 loading
-        const { data: text } = await fetchTextById(id);
-        if (this.currentRequestToken !== requestToken) {
-          return;
+
+      // Helper：已发起请求的 promise，结果可复用，避免串行等待
+      const settle = async (promise, fallback) => {
+        try {
+          const { data } = await promise;
+          return data;
+        } catch (error) {
+          console.error("load detail failed", error);
+          return fallback;
         }
+      };
+
+      try {
+        // 先加载正文，保证页面尽快可见
+        const { data: text } = await fetchTextById(id);
+        if (this.currentRequestToken !== requestToken) return;
         this.selectedText = text;
         this.detailProgress = 20;
 
-        let entities = [];
-        try {
-          const { data } = await fetchEntities(id);
-          entities = data;
-        } catch (error) {
-          console.error("fetch entities failed", error);
-        }
-        if (this.currentRequestToken !== requestToken) {
-          return;
-        }
+        // 并发拉取其余数据（实体/关系/洞察/句读），总耗时取决于最慢的一项
+        const entitiesPromise = fetchEntities(id);
+        const relationsPromise = fetchRelations(id);
+        const insightsPromise = fetchInsights(id, { light: true });
+        const sectionsPromise = fetchSections(id);
+
+        const entities = await settle(entitiesPromise, []);
+        if (this.currentRequestToken !== requestToken) return;
         this.entities = entities;
         this.detailProgress = 40;
 
-        let relations = [];
-        try {
-          const { data } = await fetchRelations(id);
-          relations = data;
-        } catch (error) {
-          console.error("fetch relations failed", error);
-        }
-        if (this.currentRequestToken !== requestToken) {
-          return;
-        }
+        const relations = await settle(relationsPromise, []);
+        if (this.currentRequestToken !== requestToken) return;
         this.relations = relations;
         this.detailProgress = 60;
 
-        let insights = null;
-        try {
-          const { data } = await fetchInsights(id, { light: true });
-          insights = data;
-        } catch (error) {
-          console.error("fetch insights failed", error);
-        }
-        if (this.currentRequestToken !== requestToken) {
-          return;
-        }
+        // 洞察与句读稍重，但已并发启动，这里按顺序取结果以更新进度
+        const insights = await settle(insightsPromise, null);
+        if (this.currentRequestToken !== requestToken) return;
         this.insights = insights;
         this.detailProgress = 80;
 
-        let sections = [];
-        try {
-          const { data } = await fetchSections(id);
-          sections = data;
-        } catch (error) {
-          console.error("fetch sections failed", error);
-        }
-        if (this.currentRequestToken !== requestToken) {
-          return;
-        }
+        const sections = await settle(sectionsPromise, []);
+        if (this.currentRequestToken !== requestToken) return;
         this.sections = sections;
         this.detailProgress = 100;
+
         this.filters.entityCategories = [...this.entityOptions];
         this.filters.relationTypes = [...this.relationOptions];
       } finally {
