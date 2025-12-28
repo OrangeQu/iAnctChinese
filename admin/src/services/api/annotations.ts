@@ -34,6 +34,13 @@ export const listRelations = async (textId: number) => {
   return data;
 };
 
+export const searchEntities = async (query: string) => {
+  const { data } = await http.get<EntityAnnotation[]>("/annotations/search", {
+    params: { query },
+  });
+  return data;
+};
+
 export const deleteEntity = async (id: number) => {
   await http.delete(`/annotations/entities/${id}`);
 };

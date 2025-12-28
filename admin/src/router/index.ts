@@ -11,6 +11,11 @@ import QualityRelationsView from "@/views/QualityRelationsView.vue";
 import ModelJobsView from "@/views/ModelJobsView.vue";
 import ProfileView from "@/views/ProfileView.vue";
 import UsersView from "@/views/UsersView.vue";
+import MapInfoView from "@/views/MapInfoView.vue";
+import GeoMarkersView from "@/views/GeoMarkersView.vue";
+import GeoHidesView from "@/views/GeoHidesView.vue";
+import SpatialView from "@/views/SpatialView.vue";
+import PresetsView from "@/views/PresetsView.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const router = createRouter({
@@ -76,6 +81,36 @@ const router = createRouter({
       name: "model-jobs",
       component: ModelJobsView,
       meta: { title: "Model Jobs" },
+    },
+    {
+      path: "/maps",
+      name: "maps",
+      component: MapInfoView,
+      meta: { title: "Maps" },
+    },
+    {
+      path: "/geo-markers",
+      name: "geo-markers",
+      component: GeoMarkersView,
+      meta: { title: "Geo Markers" },
+    },
+    {
+      path: "/geo-hides",
+      name: "geo-hides",
+      component: GeoHidesView,
+      meta: { title: "Geo Hides" },
+    },
+    {
+      path: "/spatial",
+      name: "spatial",
+      component: SpatialView,
+      meta: { title: "Spatial Data" },
+    },
+    {
+      path: "/presets",
+      name: "presets",
+      component: PresetsView,
+      meta: { title: "Visualization Presets" },
     },
     {
       path: "/users",

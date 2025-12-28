@@ -50,6 +50,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/projects/**").hasAnyRole("ADMIN", "USER")
                 .requestMatchers("/api/quality/**").hasAnyRole("ADMIN", "USER")
+                .requestMatchers("/api/spatial/**").hasAnyRole("ADMIN", "USER")
+                .requestMatchers("/api/presets/**").hasAnyRole("ADMIN", "USER")
+                .requestMatchers("/api/geo-markers/**", "/api/geo-hides/**").hasAnyRole("ADMIN", "USER")
                 .anyRequest().authenticated()
             )
             

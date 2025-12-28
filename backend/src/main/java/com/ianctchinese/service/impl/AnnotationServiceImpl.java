@@ -70,6 +70,14 @@ public class AnnotationServiceImpl implements AnnotationService {
   }
 
   @Override
+  public List<EntityAnnotation> searchEntities(String query) {
+    if (query == null || query.isBlank()) {
+      return List.of();
+    }
+    return entityRepository.findTop20ByLabelContainingIgnoreCaseOrderByIdDesc(query.trim());
+  }
+
+  @Override
   @Transactional
   public void deleteEntity(Long entityId) {
     EntityAnnotation entity = entityRepository.findById(entityId)

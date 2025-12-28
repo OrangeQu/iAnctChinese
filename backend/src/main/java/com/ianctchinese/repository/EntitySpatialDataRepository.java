@@ -11,6 +11,9 @@ import java.util.List;
 
 public interface EntitySpatialDataRepository extends JpaRepository<EntitySpatialData, Long> {
     List<EntitySpatialData> findByMapId(Long mapId);
+
+    @Query("select e from EntitySpatialData e where (:mapId is null or e.mapId = :mapId) and (:year is null or e.year = :year) order by e.id desc")
+    List<EntitySpatialData> search(@Param("mapId") Long mapId, @Param("year") Integer year);
     
     @Modifying
     @Transactional

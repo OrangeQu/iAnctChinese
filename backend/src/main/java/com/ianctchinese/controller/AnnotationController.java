@@ -45,6 +45,11 @@ public class AnnotationController {
     return ResponseEntity.ok(annotationService.getRelations(textId));
   }
 
+  @GetMapping("/search")
+  public ResponseEntity<List<EntityAnnotation>> searchEntities(@RequestParam("query") String query) {
+    return ResponseEntity.ok(annotationService.searchEntities(query));
+  }
+
   @DeleteMapping("/entities/{id}")
   public ResponseEntity<Void> deleteEntity(@PathVariable("id") Long id) {
     annotationService.deleteEntity(id);

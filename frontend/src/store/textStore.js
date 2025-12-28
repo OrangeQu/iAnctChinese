@@ -60,7 +60,7 @@ export const useTextStore = defineStore("textStore", {
         const effectiveProjectId = projectId !== undefined ? projectId : this.currentProjectId;
         this.currentProjectId = effectiveProjectId ?? null;
         const { data } = await fetchTexts(category, effectiveProjectId);
-        this.texts = data;
+        this.texts = Array.isArray(data) ? data : data?.content || [];
       } finally {
         this.loading = false;
       }

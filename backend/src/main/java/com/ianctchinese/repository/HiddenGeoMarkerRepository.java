@@ -17,4 +17,6 @@ public interface HiddenGeoMarkerRepository extends JpaRepository<HiddenGeoMarker
     boolean existsByTextIdAndEntityLabel(Long textId, String entityLabel);
 
     long countByTextIdIn(List<Long> textIds);
+
+    void deleteByTextId(Long textId);
 }

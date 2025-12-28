@@ -13,4 +13,6 @@ public interface EntityAnnotationRepository extends JpaRepository<EntityAnnotati
   void deleteByTextDocumentId(Long textId);
 
   long countByTextDocumentIdIn(List<Long> textIds);
+
+  List<EntityAnnotation> findTop20ByLabelContainingIgnoreCaseOrderByIdDesc(String label);
 }
