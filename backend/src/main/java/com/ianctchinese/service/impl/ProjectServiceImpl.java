@@ -3,12 +3,20 @@ package com.ianctchinese.service.impl;
 import com.ianctchinese.dto.ProjectCreateRequest;
 import com.ianctchinese.dto.ProjectMemberRequest;
 import com.ianctchinese.dto.ProjectResponse;
+import com.ianctchinese.dto.ProjectStatsResponse;
 import com.ianctchinese.model.Project;
 import com.ianctchinese.model.ProjectMember;
+import com.ianctchinese.model.TextDocument;
 import com.ianctchinese.model.User;
+import com.ianctchinese.repository.EntityAnnotationRepository;
+import com.ianctchinese.repository.GeoMarkerRepository;
+import com.ianctchinese.repository.HiddenGeoMarkerRepository;
+import com.ianctchinese.repository.ModelJobRepository;
 import com.ianctchinese.repository.ProjectMemberRepository;
 import com.ianctchinese.repository.ProjectRepository;
 import com.ianctchinese.repository.TextDocumentRepository;
+import com.ianctchinese.repository.TextSectionRepository;
+import com.ianctchinese.repository.RelationAnnotationRepository;
 import com.ianctchinese.repository.UserRepository;
 import com.ianctchinese.service.ProjectService;
 import java.time.LocalDateTime;
@@ -29,6 +37,12 @@ public class ProjectServiceImpl implements ProjectService {
   private final ProjectMemberRepository projectMemberRepository;
   private final UserRepository userRepository;
   private final TextDocumentRepository textDocumentRepository;
+  private final TextSectionRepository textSectionRepository;
+  private final EntityAnnotationRepository entityAnnotationRepository;
+  private final RelationAnnotationRepository relationAnnotationRepository;
+  private final GeoMarkerRepository geoMarkerRepository;
+  private final HiddenGeoMarkerRepository hiddenGeoMarkerRepository;
+  private final ModelJobRepository modelJobRepository;
 
   @Override
   @Transactional
@@ -62,18 +76,23 @@ public class ProjectServiceImpl implements ProjectService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<ProjectResponse> listMyProjects(String username) {
+  public List<ProjectResponse> listMyProjects(String username, String query, Boolean deleted) {
     User user = userRepository.findByUsername(username)
         .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
     List<ProjectMember> memberships = projectMemberRepository.findByUserId(user.getId());
     List<Long> projectIds = memberships.stream().map(ProjectMember::getProjectId).toList();
-    Map<Long, ProjectMember.Role> roleMap = memberships.stream()
-        .collect(Collectors.toMap(ProjectMember::getProjectId, ProjectMember::getRole));
-
-    List<Project> projects = projectRepository.findAll().stream()
-        .filter(p -> !Boolean.TRUE.equals(p.getDeleted()))
-        .filter(p -> projectIds.contains(p.getId()))
-        .toList();
+    if (projectIds.isEmpty()) {
+      return List.of();
+    }
+    Boolean effectiveDeleted = deleted;
+    if (effectiveDeleted == null) {
+      effectiveDeleted = false;
+    }
+    List<Project> projects = projectRepository.findByIdsWithFilters(
+        projectIds,
+        query != null && !query.isBlank() ? query.trim() : null,
+        effectiveDeleted
+    );
 
     // 收集需要的所有用户：项目所有者 + 当前用户所在项目的成员
     List<Long> ownerIds = projects.stream().map(Project::getOwnerId).toList();
@@ -124,6 +143,26 @@ public class ProjectServiceImpl implements ProjectService {
 
   @Override
   @Transactional
+  public ProjectResponse restoreProject(Long projectId, String username) {
+    User owner = userRepository.findByUsername(username)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+    Project project = projectRepository.findById(projectId)
+        .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+    if (!project.getOwnerId().equals(owner.getId())) {
+      throw new IllegalArgumentException("只有组长可以恢复项目");
+    }
+    project.setDeleted(false);
+    projectRepository.save(project);
+    textDocumentRepository.findByProjectId(projectId).forEach(doc -> {
+      doc.setIsDeleted(false);
+      textDocumentRepository.save(doc);
+    });
+    Map<Long, User> users = usersForProject(projectId, project.getOwnerId());
+    return toResponse(project, users.get(project.getOwnerId()), projectMembers(project, users));
+  }
+
+  @Override
+  @Transactional
   public ProjectResponse addMember(Long projectId, String ownerUsername, ProjectMemberRequest request) {
     User owner = userRepository.findByUsername(ownerUsername)
         .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
@@ -145,6 +184,74 @@ public class ProjectServiceImpl implements ProjectService {
         .build());
     Map<Long, User> users = usersForProject(projectId, project.getOwnerId());
     return toResponse(project, users.get(project.getOwnerId()), projectMembers(project, users));
+  }
+
+  @Override
+  @Transactional
+  public ProjectResponse updateMemberRole(Long projectId, String ownerUsername, String targetUsername, String role) {
+    User owner = userRepository.findByUsername(ownerUsername)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+    Project project = projectRepository.findById(projectId)
+        .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+    if (!project.getOwnerId().equals(owner.getId())) {
+      throw new IllegalArgumentException("只有组长可以修改角色");
+    }
+    User target = userRepository.findByUsername(targetUsername)
+        .orElseThrow(() -> new IllegalArgumentException("目标用户不存在"));
+    ProjectMember membership = projectMemberRepository
+        .findByProjectIdAndUserId(projectId, target.getId())
+        .orElseThrow(() -> new IllegalArgumentException("用户不在项目中"));
+    ProjectMember.Role nextRole;
+    try {
+      nextRole = ProjectMember.Role.valueOf(role.toUpperCase());
+    } catch (IllegalArgumentException ex) {
+      throw new IllegalArgumentException("角色无效");
+    }
+    if (project.getOwnerId().equals(target.getId()) && nextRole == ProjectMember.Role.MEMBER) {
+      throw new IllegalArgumentException("不能降级当前组长");
+    }
+    membership.setRole(nextRole);
+    projectMemberRepository.save(membership);
+    if (nextRole == ProjectMember.Role.OWNER) {
+      project.setOwnerId(target.getId());
+      projectRepository.save(project);
+    }
+    Map<Long, User> users = usersForProject(projectId, project.getOwnerId());
+    return toResponse(project, users.get(project.getOwnerId()), projectMembers(project, users));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public ProjectStatsResponse getProjectStats(Long projectId, String username) {
+    User user = userRepository.findByUsername(username)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+    Project project = projectRepository.findById(projectId)
+        .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+    requireMember(projectId, user.getId());
+    List<Long> textIds = textDocumentRepository.findByProjectId(projectId).stream()
+        .filter(doc -> !Boolean.TRUE.equals(doc.getIsDeleted()))
+        .map(TextDocument::getId)
+        .toList();
+    if (textIds.isEmpty()) {
+      return ProjectStatsResponse.builder()
+          .textCount(0)
+          .sectionCount(0)
+          .entityCount(0)
+          .relationCount(0)
+          .markerCount(0)
+          .hiddenCount(0)
+          .jobCount(0)
+          .build();
+    }
+    return ProjectStatsResponse.builder()
+        .textCount(textIds.size())
+        .sectionCount(textSectionRepository.countByTextDocumentIdIn(textIds))
+        .entityCount(entityAnnotationRepository.countByTextDocumentIdIn(textIds))
+        .relationCount(relationAnnotationRepository.countByTextDocumentIdIn(textIds))
+        .markerCount(geoMarkerRepository.countByTextIdIn(textIds))
+        .hiddenCount(hiddenGeoMarkerRepository.countByTextIdIn(textIds))
+        .jobCount(modelJobRepository.countByTextIdIn(textIds))
+        .build();
   }
 
   @Override
@@ -230,6 +337,7 @@ public class ProjectServiceImpl implements ProjectService {
         .ownerName(owner != null ? owner.getUsername() : null)
         .createdAt(p.getCreatedAt())
         .updatedAt(p.getUpdatedAt())
+        .deleted(p.getDeleted())
         .members(members)
         .build();
   }

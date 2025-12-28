@@ -18,49 +18,20 @@
             <div class="toast" v-if="error">{{ error }}</div>
           </form>
         </div>
-        <div class="form-card" v-if="selectedProject">
-          <h2>{{ selectedProject.name }}</h2>
-          <p>{{ selectedProject.description || "No description" }}</p>
-          <div class="row" style="margin-top: 10px">
-            <label>Add member</label>
-            <div style="display: flex; gap: 10px">
-              <input class="input" v-model="memberName" placeholder="username" />
-              <button class="button secondary" type="button" @click="handleAddMember">
-                Add
-              </button>
-            </div>
+        <div class="form-card">
+          <h2>Filters</h2>
+          <div class="row">
+            <label>Search</label>
+            <input class="input" v-model="query" placeholder="Project name" />
           </div>
-          <div class="section">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!selectedProject.members?.length">
-                  <td colspan="4">No members.</td>
-                </tr>
-                <tr v-for="member in selectedProject.members" :key="member.userId">
-                  <td>{{ member.username }}</td>
-                  <td>{{ member.email || "-" }}</td>
-                  <td>{{ member.role || "-" }}</td>
-                  <td>
-                    <button class="button ghost" type="button" @click="handleRemoveMember(member.username)">
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="row">
+            <label>Status</label>
+            <select class="input" v-model="deletedFilter">
+              <option value="active">Active</option>
+              <option value="deleted">Recycle Bin</option>
+            </select>
           </div>
-        </div>
-        <div class="form-card" v-else>
-          <h2>Project Details</h2>
-          <div class="banner">Select a project to see members.</div>
+          <button class="button secondary" type="button" @click="loadProjects">Apply</button>
         </div>
       </div>
     </div>
@@ -74,12 +45,13 @@
             <th>Description</th>
             <th>Owner</th>
             <th>Updated</th>
+            <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="projects.length === 0">
-            <td colspan="6">No projects yet.</td>
+            <td colspan="7">No projects found.</td>
           </tr>
           <tr v-for="project in projects" :key="project.id">
             <td>#{{ project.id }}</td>
@@ -88,11 +60,28 @@
             <td>{{ project.ownerName || "-" }}</td>
             <td>{{ formatDate(project.updatedAt) }}</td>
             <td>
-              <button class="button secondary" type="button" @click="selectProject(project.id)">
+              <span class="pill" v-if="!project.deleted">Active</span>
+              <span class="pill" v-else>Deleted</span>
+            </td>
+            <td>
+              <RouterLink class="button secondary" :to="`/projects/${project.id}`">
                 Details
-              </button>
-              <button class="button primary" type="button" @click="handleDelete(project.id)">
+              </RouterLink>
+              <button
+                v-if="!project.deleted"
+                class="button primary"
+                type="button"
+                @click="handleDelete(project.id)"
+              >
                 Delete
+              </button>
+              <button
+                v-else
+                class="button ghost"
+                type="button"
+                @click="handleRestore(project.id)"
+              >
+                Restore
               </button>
             </td>
           </tr>
@@ -104,24 +93,23 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from "vue";
+import { RouterLink } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import {
   listProjects,
   createProject,
-  getProject,
   deleteProject,
-  addMember,
-  removeMember,
+  restoreProject,
   type ProjectResponse,
 } from "@/services/api/projects";
 
 const appStore = useAppStore();
 
 const projects = ref<ProjectResponse[]>([]);
-const selectedProject = ref<ProjectResponse | null>(null);
 const loading = ref(true);
 const error = ref("");
-const memberName = ref("");
+const query = ref("");
+const deletedFilter = ref("active");
 
 const createForm = reactive({
   name: "",
@@ -136,11 +124,11 @@ const formatDate = (value?: string) => {
 };
 
 const loadProjects = async () => {
-  projects.value = await listProjects();
-};
-
-const selectProject = async (id: number) => {
-  selectedProject.value = await getProject(id);
+  const deleted = deletedFilter.value === "deleted";
+  projects.value = await listProjects({
+    query: query.value.trim() || undefined,
+    deleted,
+  });
 };
 
 const handleCreate = async () => {
@@ -162,36 +150,19 @@ const handleDelete = async (id: number) => {
   error.value = "";
   try {
     await deleteProject(id);
-    if (selectedProject.value?.id === id) {
-      selectedProject.value = null;
-    }
     await loadProjects();
   } catch (err: any) {
     error.value = err?.response?.data?.message || err?.message || "Failed to delete.";
   }
 };
 
-const handleAddMember = async () => {
-  if (!selectedProject.value || !memberName.value.trim()) return;
+const handleRestore = async (id: number) => {
   error.value = "";
   try {
-    selectedProject.value = await addMember(
-      selectedProject.value.id,
-      memberName.value.trim()
-    );
-    memberName.value = "";
+    await restoreProject(id);
+    await loadProjects();
   } catch (err: any) {
-    error.value = err?.response?.data?.message || err?.message || "Failed to add member.";
-  }
-};
-
-const handleRemoveMember = async (username: string) => {
-  if (!selectedProject.value) return;
-  error.value = "";
-  try {
-    selectedProject.value = await removeMember(selectedProject.value.id, username);
-  } catch (err: any) {
-    error.value = err?.response?.data?.message || err?.message || "Failed to remove member.";
+    error.value = err?.response?.data?.message || err?.message || "Failed to restore.";
   }
 };
 
@@ -199,9 +170,6 @@ watch(
   () => appStore.refreshKey,
   () => {
     loadProjects();
-    if (selectedProject.value) {
-      selectProject(selectedProject.value.id);
-    }
   }
 );
 

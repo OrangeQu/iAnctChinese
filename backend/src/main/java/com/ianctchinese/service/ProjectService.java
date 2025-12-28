@@ -9,7 +9,7 @@ public interface ProjectService {
 
   ProjectResponse createProject(String ownerUsername, ProjectCreateRequest request);
 
-  List<ProjectResponse> listMyProjects(String username);
+  List<ProjectResponse> listMyProjects(String username, String query, Boolean deleted);
 
   ProjectResponse getProject(Long projectId, String username);
 
@@ -20,4 +20,10 @@ public interface ProjectService {
   ProjectResponse removeMember(Long projectId, String ownerUsername, String targetUsername);
 
   ProjectResponse leaveProject(Long projectId, String username);
+
+  ProjectResponse restoreProject(Long projectId, String username);
+
+  ProjectResponse updateMemberRole(Long projectId, String ownerUsername, String targetUsername, String role);
+
+  com.ianctchinese.dto.ProjectStatsResponse getProjectStats(Long projectId, String username);
 }

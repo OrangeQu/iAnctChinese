@@ -9,4 +9,6 @@ public interface TextSectionRepository extends JpaRepository<TextSection, Long> 
   List<TextSection> findByTextDocumentId(Long textId);
 
   void deleteByTextDocumentId(Long textId);
+
+  long countByTextDocumentIdIn(List<Long> textIds);
 }

@@ -10,6 +10,7 @@ export interface UserInfo {
   email: string;
   createTime: string | null;
   lastLoginTime: string | null;
+  role?: string;
 }
 
 export const useAuthStore = defineStore("auth", {

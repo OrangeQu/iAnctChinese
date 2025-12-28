@@ -15,6 +15,7 @@ public class ProjectResponse {
   private String ownerName;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
+  private Boolean deleted;
   private List<ProjectMemberInfo> members;
 
   @Data

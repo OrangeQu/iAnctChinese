@@ -9,4 +9,6 @@ public interface EntityAnnotationRepository extends JpaRepository<EntityAnnotati
   List<EntityAnnotation> findByTextDocumentId(Long textId);
 
   void deleteByTextDocumentId(Long textId);
+
+  long countByTextDocumentIdIn(List<Long> textIds);
 }

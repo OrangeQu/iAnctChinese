@@ -30,8 +30,8 @@ export interface TextUpdateRequest {
   era?: string;
 }
 
-export const listTexts = async () => {
-  const { data } = await http.get<TextDocument[]>("/texts");
+export const listTexts = async (params?: { projectId?: number; category?: string }) => {
+  const { data } = await http.get<TextDocument[]>("/texts", { params });
   return data;
 };
 

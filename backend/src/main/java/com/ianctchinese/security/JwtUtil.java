@@ -48,15 +48,22 @@ public class JwtUtil {
     return extractExpiration(token).before(new Date());
   }
 
-  public String generateToken(String username) {
+  public String generateToken(String username, String role) {
+    String safeRole = (role == null || role.isBlank()) ? "USER" : role;
     Map<String, Object> claims = new HashMap<>();
-    return createToken(claims, username);
+    claims.put("role", safeRole);
+    return createToken(claims, username, safeRole);
   }
 
-  private String createToken(Map<String, Object> claims, String subject) {
+  public String extractRole(String token) {
+    return extractClaim(token, claims -> (String) claims.get("role"));
+  }
+
+  private String createToken(Map<String, Object> claims, String subject, String role) {
     return Jwts.builder()
         .setClaims(claims)
         .setSubject(subject)
+        .claim("role", role)
         .setIssuedAt(new Date(System.currentTimeMillis()))
         .setExpiration(new Date(System.currentTimeMillis() + expiration))
         .signWith(SignatureAlgorithm.HS256, getSigningKey())

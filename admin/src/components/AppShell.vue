@@ -11,6 +11,7 @@
         <RouterLink to="/projects">Projects</RouterLink>
         <RouterLink to="/annotations">Annotations</RouterLink>
         <RouterLink to="/model-jobs">Model Jobs</RouterLink>
+        <RouterLink v-if="canSeeUsers" to="/users">Users</RouterLink>
         <RouterLink to="/me">Profile</RouterLink>
       </nav>
     </aside>
@@ -30,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watchEffect } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useAppStore } from "@/stores/app";
@@ -42,6 +43,10 @@ defineEmits<{ (event: "refresh"): void }>();
 const router = useRouter();
 const authStore = useAuthStore();
 const appStore = useAppStore();
+const canSeeUsers = computed(() => {
+  const role = authStore.user?.role;
+  return !role || role === "ADMIN";
+});
 
 const apiBase = ref(appStore.apiBase);
 

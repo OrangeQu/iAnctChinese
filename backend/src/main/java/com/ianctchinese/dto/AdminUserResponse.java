@@ -10,12 +10,12 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserInfoResponse {
+public class AdminUserResponse {
 
   private Long id;
   private String username;
   private String email;
+  private Boolean enabled;
   private LocalDateTime createTime;
   private LocalDateTime lastLoginTime;
-  private String role;
 }

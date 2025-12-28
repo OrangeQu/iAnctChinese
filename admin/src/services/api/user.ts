@@ -6,6 +6,7 @@ export interface UserInfoResponse {
   email: string;
   createTime?: string;
   lastLoginTime?: string;
+  role?: string;
 }
 
 export interface UpdateEmailRequest {

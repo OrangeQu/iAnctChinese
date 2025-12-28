@@ -9,6 +9,7 @@ import com.ianctchinese.repository.UserRepository;
 import com.ianctchinese.security.JwtUtil;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
   private final UserRepository userRepository;
@@ -45,7 +47,9 @@ public class AuthService {
 
     userRepository.save(user);
 
-    String token = jwtUtil.generateToken(user.getUsername());
+    String role = user.getRole() == null ? "USER" : user.getRole().name();
+    log.debug("Login token role: user={}, role={}", user.getUsername(), role);
+    String token = jwtUtil.generateToken(user.getUsername(), role);
 
     return AuthResponse.builder()
         .token(token)
@@ -70,7 +74,8 @@ public class AuthService {
     user.setLastLoginTime(LocalDateTime.now());
     userRepository.save(user);
 
-    String token = jwtUtil.generateToken(user.getUsername());
+    String role = user.getRole() == null ? "USER" : user.getRole().name();
+    String token = jwtUtil.generateToken(user.getUsername(), role);
 
     return AuthResponse.builder()
         .token(token)
@@ -84,12 +89,15 @@ public class AuthService {
     User user = userRepository.findByUsername(username)
         .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
 
+    String role = user.getRole() == null ? "USER" : user.getRole().name();
+
     return UserInfoResponse.builder()
         .id(user.getId())
         .username(user.getUsername())
         .email(user.getEmail())
         .createTime(user.getCreateTime())
         .lastLoginTime(user.getLastLoginTime())
+        .role(role)
         .build();
   }
 }

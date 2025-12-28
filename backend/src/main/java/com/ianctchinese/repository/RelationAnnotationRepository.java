@@ -11,4 +11,6 @@ public interface RelationAnnotationRepository extends JpaRepository<RelationAnno
   void deleteBySourceIdOrTargetId(Long sourceId, Long targetId);
 
   void deleteByTextDocumentId(Long textId);
+
+  long countByTextDocumentIdIn(List<Long> textIds);
 }

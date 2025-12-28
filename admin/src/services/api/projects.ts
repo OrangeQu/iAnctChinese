@@ -15,6 +15,7 @@ export interface ProjectResponse {
   ownerName?: string;
   createdAt?: string;
   updatedAt?: string;
+  deleted?: boolean;
   members?: ProjectMemberInfo[];
 }
 
@@ -23,8 +24,20 @@ export interface ProjectCreateRequest {
   description?: string;
 }
 
-export const listProjects = async () => {
-  const { data } = await http.get<ProjectResponse[]>("/projects/mine");
+export interface ProjectStatsResponse {
+  textCount: number;
+  sectionCount: number;
+  entityCount: number;
+  relationCount: number;
+  markerCount: number;
+  hiddenCount: number;
+  jobCount: number;
+}
+
+export const listProjects = async (params?: { query?: string; deleted?: boolean }) => {
+  const { data } = await http.get<ProjectResponse[]>("/projects/mine", {
+    params,
+  });
   return data;
 };
 
@@ -42,6 +55,11 @@ export const deleteProject = async (id: number) => {
   await http.delete(`/projects/${id}`);
 };
 
+export const restoreProject = async (id: number) => {
+  const { data } = await http.post<ProjectResponse>(`/projects/${id}/restore`);
+  return data;
+};
+
 export const addMember = async (projectId: number, username: string) => {
   const { data } = await http.post<ProjectResponse>(
     `/projects/${projectId}/members`,
@@ -55,5 +73,22 @@ export const removeMember = async (projectId: number, username: string) => {
     `/projects/${projectId}/members`,
     { data: { username } }
   );
+  return data;
+};
+
+export const updateMemberRole = async (
+  projectId: number,
+  username: string,
+  role: string
+) => {
+  const { data } = await http.put<ProjectResponse>(`/projects/${projectId}/members/role`, {
+    username,
+    role,
+  });
+  return data;
+};
+
+export const getProjectStats = async (projectId: number) => {
+  const { data } = await http.get<ProjectStatsResponse>(`/projects/${projectId}/stats`);
   return data;
 };

@@ -3,9 +3,11 @@ import LoginView from "@/views/LoginView.vue";
 import DashboardView from "@/views/DashboardView.vue";
 import TextsView from "@/views/TextsView.vue";
 import ProjectsView from "@/views/ProjectsView.vue";
+import ProjectDetailView from "@/views/ProjectDetailView.vue";
 import AnnotationsView from "@/views/AnnotationsView.vue";
 import ModelJobsView from "@/views/ModelJobsView.vue";
 import ProfileView from "@/views/ProfileView.vue";
+import UsersView from "@/views/UsersView.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const router = createRouter({
@@ -37,6 +39,12 @@ const router = createRouter({
       meta: { title: "Projects" },
     },
     {
+      path: "/projects/:id",
+      name: "project-detail",
+      component: ProjectDetailView,
+      meta: { title: "Project Detail" },
+    },
+    {
       path: "/annotations",
       name: "annotations",
       component: AnnotationsView,
@@ -47,6 +55,12 @@ const router = createRouter({
       name: "model-jobs",
       component: ModelJobsView,
       meta: { title: "Model Jobs" },
+    },
+    {
+      path: "/users",
+      name: "users",
+      component: UsersView,
+      meta: { title: "Users" },
     },
     {
       path: "/me",

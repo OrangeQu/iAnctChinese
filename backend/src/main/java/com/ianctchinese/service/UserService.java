@@ -53,12 +53,14 @@ public class UserService {
   }
 
   private UserInfoResponse toResponse(User user) {
+    String role = user.getRole() == null ? "USER" : user.getRole().name();
     return UserInfoResponse.builder()
         .id(user.getId())
         .username(user.getUsername())
         .email(user.getEmail())
         .createTime(user.getCreateTime())
         .lastLoginTime(user.getLastLoginTime())
+        .role(role)
         .build();
   }
 }
