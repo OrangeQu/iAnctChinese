@@ -71,11 +71,10 @@ public class SecurityConfig {
         // configuration.setAllowedOriginPatterns(List.of("*"));
         
         // ✅ 明确指定前端地址：本地开发和生产环境
-        configuration.setAllowedOrigins(List.of(
-            "http://localhost:5173",
+        configuration.setAllowedOriginPatterns(List.of(
+            "http://localhost:*",
             "http://43.130.235.62:5173"
         ));
-        configuration.setAllowedOriginPatterns(null);
         
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

@@ -1,0 +1,78 @@
+import { createRouter, createWebHistory } from "vue-router";
+import LoginView from "@/views/LoginView.vue";
+import DashboardView from "@/views/DashboardView.vue";
+import TextsView from "@/views/TextsView.vue";
+import ProjectsView from "@/views/ProjectsView.vue";
+import AnnotationsView from "@/views/AnnotationsView.vue";
+import ModelJobsView from "@/views/ModelJobsView.vue";
+import ProfileView from "@/views/ProfileView.vue";
+import { useAuthStore } from "@/stores/auth";
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    { path: "/", redirect: "/dashboard" },
+    {
+      path: "/login",
+      name: "login",
+      component: LoginView,
+      meta: { layout: "auth", title: "Login" },
+    },
+    {
+      path: "/dashboard",
+      name: "dashboard",
+      component: DashboardView,
+      meta: { title: "Overview" },
+    },
+    {
+      path: "/texts",
+      name: "texts",
+      component: TextsView,
+      meta: { title: "Texts" },
+    },
+    {
+      path: "/projects",
+      name: "projects",
+      component: ProjectsView,
+      meta: { title: "Projects" },
+    },
+    {
+      path: "/annotations",
+      name: "annotations",
+      component: AnnotationsView,
+      meta: { title: "Annotations" },
+    },
+    {
+      path: "/model-jobs",
+      name: "model-jobs",
+      component: ModelJobsView,
+      meta: { title: "Model Jobs" },
+    },
+    {
+      path: "/me",
+      name: "me",
+      component: ProfileView,
+      meta: { title: "Profile" },
+    },
+  ],
+});
+
+router.beforeEach(async (to) => {
+  const authStore = useAuthStore();
+  if (!authStore.token) {
+    authStore.restore();
+  }
+  if (to.path === "/login" && authStore.token) {
+    return { path: "/dashboard" };
+  }
+  if (to.path === "/login") return true;
+  if (!authStore.token) {
+    return { path: "/login", query: { redirect: to.fullPath } };
+  }
+  if (!authStore.user) {
+    await authStore.fetchCurrentUser();
+  }
+  return true;
+});
+
+export default router;

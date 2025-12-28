@@ -98,3 +98,10 @@ E:\iAnctChinese
 4. **协作与权限**：结合 Spring Security + JWT 实现审校、评论与项目级权限控制。
 
 欢迎根据课程需求继续完善。若遇到问题，可先运行 `mvn test`/`npm run build` 快速验证依赖是否完整，再排查具体实现。祝项目顺利！
+
+## Admin dev notes
+
+- Vite dev server runs on `http://localhost:5174` (strict port).
+- Proxy: `/api` -> `http://localhost:8080` with `changeOrigin: true`.
+- Backend CORS should allow `http://localhost:*` for local dev.
+- Production host should serve the admin build at `/admin/` with history fallback enabled.
