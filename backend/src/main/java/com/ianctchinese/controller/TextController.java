@@ -41,10 +41,22 @@ public class TextController {
   }
 
   @GetMapping
-  public ResponseEntity<List<TextDocument>> listTexts(
+  public ResponseEntity<org.springframework.data.domain.Page<TextDocument>> listTexts(
       @RequestParam(name = "category", required = false) String category,
-      @RequestParam(name = "projectId", required = false) Long projectId) {
-    return ResponseEntity.ok(textService.listTexts(category, projectId, currentUser.getUsername()));
+      @RequestParam(name = "era", required = false) String era,
+      @RequestParam(name = "author", required = false) String author,
+      @RequestParam(name = "projectId", required = false) Long projectId,
+      @RequestParam(name = "deleted", required = false) Boolean deleted,
+      org.springframework.data.domain.Pageable pageable) {
+    return ResponseEntity.ok(textService.listTexts(
+        category,
+        era,
+        author,
+        projectId,
+        deleted,
+        currentUser.getUsername(),
+        pageable
+    ));
   }
 
   @GetMapping("/search")

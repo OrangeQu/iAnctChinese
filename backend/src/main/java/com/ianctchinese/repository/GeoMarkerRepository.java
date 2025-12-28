@@ -14,5 +14,7 @@ public interface GeoMarkerRepository extends JpaRepository<GeoMarker, Long> {
     
     void deleteByTextId(Long textId);
 
+    List<GeoMarker> findByEntityIdIn(List<Long> entityIds);
+
     long countByTextIdIn(List<Long> textIds);
 }

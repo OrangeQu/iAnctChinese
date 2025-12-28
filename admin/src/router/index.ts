@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import LoginView from "@/views/LoginView.vue";
 import DashboardView from "@/views/DashboardView.vue";
 import TextsView from "@/views/TextsView.vue";
+import TextDetailView from "@/views/TextDetailView.vue";
 import ProjectsView from "@/views/ProjectsView.vue";
 import ProjectDetailView from "@/views/ProjectDetailView.vue";
 import AnnotationsView from "@/views/AnnotationsView.vue";
@@ -31,6 +32,12 @@ const router = createRouter({
       name: "texts",
       component: TextsView,
       meta: { title: "Texts" },
+    },
+    {
+      path: "/texts/:id",
+      name: "text-detail",
+      component: TextDetailView,
+      meta: { title: "Text Detail" },
     },
     {
       path: "/projects",

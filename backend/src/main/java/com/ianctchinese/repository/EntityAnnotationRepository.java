@@ -8,6 +8,8 @@ public interface EntityAnnotationRepository extends JpaRepository<EntityAnnotati
 
   List<EntityAnnotation> findByTextDocumentId(Long textId);
 
+  List<EntityAnnotation> findBySectionIdOrderByStartOffset(Long sectionId);
+
   void deleteByTextDocumentId(Long textId);
 
   long countByTextDocumentIdIn(List<Long> textIds);

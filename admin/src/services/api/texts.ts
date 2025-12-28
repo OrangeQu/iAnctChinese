@@ -10,6 +10,8 @@ export interface TextDocument {
   author?: string;
   era?: string;
   createdAt?: string;
+  updatedAt?: string;
+  isDeleted?: boolean;
 }
 
 export interface TextCreateRequest {
@@ -30,8 +32,36 @@ export interface TextUpdateRequest {
   era?: string;
 }
 
-export const listTexts = async (params?: { projectId?: number; category?: string }) => {
-  const { data } = await http.get<TextDocument[]>("/texts", { params });
+export interface Page<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface TextListParams {
+  projectId?: number;
+  category?: string;
+  era?: string;
+  author?: string;
+  deleted?: boolean;
+  page?: number;
+  size?: number;
+}
+
+export const listTextsPage = async (params?: TextListParams) => {
+  const { data } = await http.get<Page<TextDocument>>("/texts", { params });
+  return data;
+};
+
+export const listTexts = async (params?: TextListParams) => {
+  const data = await listTextsPage(params);
+  return data.content || [];
+};
+
+export const getText = async (id: number) => {
+  const { data } = await http.get<TextDocument>(`/texts/${id}`);
   return data;
 };
 

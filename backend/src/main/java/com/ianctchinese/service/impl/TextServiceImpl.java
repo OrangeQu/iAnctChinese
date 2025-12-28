@@ -19,6 +19,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,19 +70,28 @@ public class TextServiceImpl implements TextService {
   }
 
   @Override
-  public List<TextDocument> listTexts(String category, Long projectId, String username) {
+  public Page<TextDocument> listTexts(
+      String category,
+      String era,
+      String author,
+      Long projectId,
+      Boolean deleted,
+      String username,
+      Pageable pageable) {
     if (projectId != null) {
       ensureProjectMember(projectId, username);
-      if (category == null || category.isBlank()) {
-        return textDocumentRepository.findActiveByProjectId(projectId);
-      }
-      return textDocumentRepository.findActiveByProjectIdAndCategory(projectId, category);
     }
-    // 无项目，返回个人可见（兼容历史数据，无 projectId）
-    if (category == null || category.isBlank()) {
-      return textDocumentRepository.findActiveByProjectIdIsNull();
-    }
-    return textDocumentRepository.findActiveByProjectIdIsNullAndCategory(category);
+    String resolvedCategory = category != null && !category.isBlank() ? category.trim() : null;
+    String resolvedEra = era != null && !era.isBlank() ? era.trim() : null;
+    String resolvedAuthor = author != null && !author.isBlank() ? author.trim() : null;
+    return textDocumentRepository.searchTexts(
+        projectId,
+        resolvedCategory,
+        resolvedEra,
+        resolvedAuthor,
+        deleted,
+        pageable
+    );
   }
 
   @Override

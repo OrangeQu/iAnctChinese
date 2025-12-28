@@ -4,6 +4,8 @@ import com.ianctchinese.model.TextDocument;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 public interface TextDocumentRepository extends JpaRepository<TextDocument, Long> {
@@ -27,6 +29,22 @@ public interface TextDocumentRepository extends JpaRepository<TextDocument, Long
   List<TextDocument> findActiveByProjectIdIsNullAndCategory(@Param("category") String category);
 
   List<TextDocument> findByProjectId(Long projectId);
+
+  @Query("""
+      SELECT t FROM TextDocument t
+      WHERE (:projectId IS NULL OR t.projectId = :projectId)
+        AND (:category IS NULL OR LOWER(t.category) LIKE LOWER(CONCAT('%', :category, '%')))
+        AND (:era IS NULL OR LOWER(t.era) LIKE LOWER(CONCAT('%', :era, '%')))
+        AND (:author IS NULL OR LOWER(t.author) LIKE LOWER(CONCAT('%', :author, '%')))
+        AND (:deleted IS NULL OR t.isDeleted = :deleted)
+      """)
+  Page<TextDocument> searchTexts(
+      @Param("projectId") Long projectId,
+      @Param("category") String category,
+      @Param("era") String era,
+      @Param("author") String author,
+      @Param("deleted") Boolean deleted,
+      Pageable pageable);
 
   @Query("SELECT t FROM TextDocument t WHERE (t.isDeleted = false OR t.isDeleted IS NULL) AND (" +
       "LOWER(t.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
