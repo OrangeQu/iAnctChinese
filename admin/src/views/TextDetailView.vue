@@ -175,6 +175,12 @@ import {
 
 const route = useRoute();
 const textId = Number(route.params.id);
+const requestedSectionId = computed(() => {
+  const value = route.query.sectionId;
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+});
 
 const loading = ref(true);
 const text = ref<TextDocument | null>(null);
@@ -216,9 +222,17 @@ const loadText = async () => {
 };
 
 const loadSections = async () => {
-  const data = await listSections(textId, { page: sectionPage.value - 1, size: 12 });
+  const size = requestedSectionId.value ? 2000 : 12;
+  const data = await listSections(textId, { page: sectionPage.value - 1, size });
   sections.value = data.content || [];
   sectionTotalPages.value = data.totalPages || 1;
+  if (requestedSectionId.value) {
+    const match = sections.value.find((section) => section.id === requestedSectionId.value);
+    if (match) {
+      await selectSection(match);
+      return;
+    }
+  }
   if (!selectedSection.value && sections.value.length > 0) {
     selectSection(sections.value[0]);
   }

@@ -20,21 +20,23 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Name</th>
-              <th>Type</th>
+              <th>Label</th>
+              <th>Category</th>
+              <th>Span</th>
               <th>Context</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="entities.length === 0">
-              <td colspan="5">No entities.</td>
+              <td colspan="6">No entities.</td>
             </tr>
             <tr v-for="entity in entities" :key="entity.id">
               <td>#{{ entity.id }}</td>
-              <td>{{ entity.entityName || "-" }}</td>
-              <td>{{ entity.entityType || "-" }}</td>
-              <td>{{ entity.context || "-" }}</td>
+              <td>{{ entity.label || "-" }}</td>
+              <td>{{ entity.category || "-" }}</td>
+              <td>{{ entity.startOffset ?? "-" }} - {{ entity.endOffset ?? "-" }}</td>
+              <td>{{ entityContext(entity) || "-" }}</td>
               <td>
                 <button class="button ghost" type="button" @click="handleDeleteEntity(entity.id)">
                   Delete
@@ -50,21 +52,23 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Subject</th>
+              <th>Source</th>
               <th>Relation</th>
-              <th>Object</th>
+              <th>Target</th>
+              <th>Evidence</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="relations.length === 0">
-              <td colspan="5">No relations.</td>
+              <td colspan="6">No relations.</td>
             </tr>
             <tr v-for="relation in relations" :key="relation.id">
               <td>#{{ relation.id }}</td>
-              <td>{{ relation.subject || "-" }}</td>
-              <td>{{ relation.relation || "-" }}</td>
-              <td>{{ relation.object || "-" }}</td>
+              <td>{{ relation.source?.label || "-" }}</td>
+              <td>{{ relation.relationType || "-" }}</td>
+              <td>{{ relation.target?.label || "-" }}</td>
+              <td>{{ relation.evidence || "-" }}</td>
               <td>
                 <button class="button ghost" type="button" @click="handleDeleteRelation(relation.id)">
                   Delete
@@ -130,6 +134,15 @@ const loadAll = async () => {
   await loadTexts();
   await loadAnnotations();
   loading.value = false;
+};
+
+const entityContext = (entity: EntityAnnotation) => {
+  const original = entity.section?.originalText;
+  if (!original) return "";
+  if (entity.startOffset == null || entity.endOffset == null) return "";
+  const start = Math.max(0, Math.min(entity.startOffset, original.length));
+  const end = Math.max(start, Math.min(entity.endOffset, original.length));
+  return original.slice(start, end);
 };
 
 const handleDeleteEntity = async (id: number) => {

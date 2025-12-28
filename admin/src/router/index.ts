@@ -6,6 +6,8 @@ import TextDetailView from "@/views/TextDetailView.vue";
 import ProjectsView from "@/views/ProjectsView.vue";
 import ProjectDetailView from "@/views/ProjectDetailView.vue";
 import AnnotationsView from "@/views/AnnotationsView.vue";
+import QualityEntitiesView from "@/views/QualityEntitiesView.vue";
+import QualityRelationsView from "@/views/QualityRelationsView.vue";
 import ModelJobsView from "@/views/ModelJobsView.vue";
 import ProfileView from "@/views/ProfileView.vue";
 import UsersView from "@/views/UsersView.vue";
@@ -56,6 +58,18 @@ const router = createRouter({
       name: "annotations",
       component: AnnotationsView,
       meta: { title: "Annotations" },
+    },
+    {
+      path: "/quality/entities",
+      name: "quality-entities",
+      component: QualityEntitiesView,
+      meta: { title: "Quality - Entities" },
+    },
+    {
+      path: "/quality/relations",
+      name: "quality-relations",
+      component: QualityRelationsView,
+      meta: { title: "Quality - Relations" },
     },
     {
       path: "/model-jobs",

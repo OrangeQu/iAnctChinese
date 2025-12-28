@@ -2,16 +2,22 @@ import http from "@/services/http";
 
 export interface EntityAnnotation {
   id: number;
-  entityName?: string;
-  entityType?: string;
-  context?: string;
+  label?: string;
+  category?: string;
+  startOffset?: number;
+  endOffset?: number;
+  section?: {
+    id: number;
+    originalText?: string;
+  };
 }
 
 export interface RelationAnnotation {
   id: number;
-  subject?: string;
-  relation?: string;
-  object?: string;
+  relationType?: string;
+  evidence?: string;
+  source?: EntityAnnotation;
+  target?: EntityAnnotation;
 }
 
 export const listEntities = async (textId: number) => {
