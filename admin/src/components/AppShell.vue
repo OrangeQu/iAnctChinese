@@ -10,8 +10,7 @@
         <RouterLink to="/texts">Texts</RouterLink>
         <RouterLink to="/projects">Projects</RouterLink>
         <RouterLink to="/annotations">Annotations</RouterLink>
-        <RouterLink to="/quality/entities">Quality - Entities</RouterLink>
-        <RouterLink to="/quality/relations">Quality - Relations</RouterLink>
+        <!-- Hidden: quality pages -->
         <!-- Hidden: maps/geo/spatial/presets/model-jobs admin pages -->
         <RouterLink v-if="canSeeUsers" to="/users">Users</RouterLink>
         <RouterLink to="/me">Profile</RouterLink>
